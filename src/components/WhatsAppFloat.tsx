@@ -1,6 +1,8 @@
 "use client";
 
 import { ClientProfile } from "@/lib/types";
+import { useConfig } from "@/context/ConfigContext";
+import { branding } from "@/config/branding";
 import { MessageSquare } from "lucide-react";
 
 interface WhatsAppFloatProps {
@@ -8,8 +10,13 @@ interface WhatsAppFloatProps {
 }
 
 export function WhatsAppFloat({ client }: WhatsAppFloatProps) {
-  // Enlace oficial exacto solicitado
-  const baseTargetUrl = "https://wa.me/573185577157?text=Hola%20Internet%20Aponte%20Plus,%20necesito%20soporte%20con%20mi%20servicio.";
+  const { config } = useConfig();
+  const rawPhone = config.companyInfo.supportPhone || branding.supportPhone;
+  const cleanPhone = rawPhone.replace(/\D/g, "");
+  const fullPhone = cleanPhone.length === 10 ? `57${cleanPhone}` : cleanPhone;
+  const companyName = config.companyInfo.companyName || branding.companyName;
+
+  const targetUrl = `https://wa.me/${fullPhone}?text=${encodeURIComponent(`Hola ${companyName}, necesito soporte con mi servicio.`)}`;
 
   return (
     <div className="fixed bottom-5 right-5 z-40 flex items-center group">
@@ -19,7 +26,7 @@ export function WhatsAppFloat({ client }: WhatsAppFloatProps) {
       </span>
 
       <a
-        href={baseTargetUrl}
+        href={targetUrl}
         target="_blank"
         rel="noopener noreferrer"
         aria-label="Contactar soporte por WhatsApp"

@@ -66,7 +66,7 @@ export function InvoicePdfModal({
           {/* Header */}
           <div className="flex flex-col sm:flex-row justify-between items-start gap-4 border-b border-slate-200 dark:border-slate-800 pb-6">
             <div>
-              <div className="h-12 w-auto mb-2 flex items-center bg-white dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 max-w-[160px]">
+              <div className="h-24 sm:h-28 w-auto mb-3 flex items-center justify-center bg-white p-2 rounded-2xl border border-slate-200/80 shadow-md max-w-[240px]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={branding.logoUrl}
@@ -86,7 +86,7 @@ export function InvoicePdfModal({
             </div>
 
             <div className="sm:text-right">
-              <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300 block">
+              <span className="text-xs font-sans font-bold tracking-tight text-slate-700 dark:text-slate-300 block">
                 {invoice.folio}
               </span>
               <div className="mt-1">
@@ -125,7 +125,7 @@ export function InvoicePdfModal({
                 {client?.nombreCompleto || "Abonado Registrado"}
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Cédula / NIT: <span className="font-mono font-medium">{client?.cedula || "N/A"}</span>
+                Cédula / NIT: <span className="font-sans font-semibold tracking-tight tabular-nums">{client?.cedula || "N/A"}</span>
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 Dirección: {client?.direccion || "N/A"}
@@ -137,10 +137,10 @@ export function InvoicePdfModal({
                 Fechas y Servicio
               </span>
               <p className="text-xs text-slate-600 dark:text-slate-300">
-                <strong>Fecha de Emisión:</strong> {formatDate(invoice.fechaEmision)}
+                <strong>Fecha de Emisión:</strong> <span className="font-sans font-semibold tracking-tight tabular-nums">{formatDate(invoice.fechaEmision)}</span>
               </p>
               <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
-                <strong>Fecha de Vencimiento:</strong> {formatDate(invoice.fechaVencimiento)}
+                <strong>Fecha de Vencimiento:</strong> <span className="font-sans font-semibold tracking-tight tabular-nums">{formatDate(invoice.fechaVencimiento)}</span>
               </p>
               <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
                 <strong>Plan:</strong> {client?.plan?.nombre || "Fibra Óptica Residencial"}
@@ -148,26 +148,24 @@ export function InvoicePdfModal({
             </div>
           </div>
 
-          {/* Itemized Table */}
+          {/* Itemized Table (Tarifa Plana sin IVA) */}
           <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
             <table className="w-full text-left text-xs sm:text-sm">
               <thead className="bg-slate-100/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-800">
                 <tr>
-                  <th className="py-3 px-4">Concepto</th>
-                  <th className="py-3 px-4 text-right">Subtotal</th>
-                  <th className="py-3 px-4 text-right">IVA (19%)</th>
-                  <th className="py-3 px-4 text-right">Total</th>
+                  <th className="py-3 px-4">Concepto / Servicio</th>
+                  <th className="py-3 px-4 text-center">Tarifa Plana</th>
+                  <th className="py-3 px-4 text-right">Total a Pagar</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 <tr>
                   <td className="py-3.5 px-4 font-medium">
                     <div>{invoice.concepto}</div>
-                    <span className="text-xs text-slate-400">Servicio de telecomunicaciones periodo {invoice.periodo}</span>
+                    <span className="text-xs text-slate-400">Servicio de telecomunicaciones periodo {invoice.periodo} (Exento de IVA)</span>
                   </td>
-                  <td className="py-3.5 px-4 text-right font-mono">{formatCurrency(invoice.subtotal)}</td>
-                  <td className="py-3.5 px-4 text-right font-mono">{formatCurrency(invoice.impuestos)}</td>
-                  <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-900 dark:text-slate-100">
+                  <td className="py-3.5 px-4 text-center font-sans font-bold tracking-tight tabular-nums">{formatCurrency(invoice.total)}</td>
+                  <td className="py-3.5 px-4 text-right font-sans font-bold tracking-tight tabular-nums text-slate-900 dark:text-slate-100">
                     {formatCurrency(invoice.total)}
                   </td>
                 </tr>
@@ -179,11 +177,11 @@ export function InvoicePdfModal({
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-100/70 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-700">
             <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
               <ShieldCheck className="w-4 h-4 text-slate-500" strokeWidth={1.75} />
-              <span>Facturación digital WispHub</span>
+              <span>Facturación digital WispHub • Tarifa Fija Mensual</span>
             </div>
             <div className="text-right w-full sm:w-auto">
-              <span className="text-xs text-slate-400 block">Total Liquidado</span>
-              <span className="text-2xl font-bold text-slate-900 dark:text-slate-100 font-mono">
+              <span className="text-xs text-slate-400 block font-semibold uppercase tracking-wider">Total a Pagar</span>
+              <span className="text-2xl font-sans font-bold tracking-tight tabular-nums text-slate-900 dark:text-slate-100">
                 {formatCurrency(invoice.total)}
               </span>
             </div>

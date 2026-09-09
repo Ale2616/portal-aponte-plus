@@ -16,14 +16,20 @@ export function FileUpload({ onFileSelect, selectedFile, error }: FileUploadProp
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = (file: File) => {
-    const validTypes = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
-    if (!validTypes.includes(file.type)) {
-      alert("Por favor selecciona una imagen válida (JPG, PNG, WebP) o un archivo PDF.");
+    const ext = file.name.toLowerCase().split(".").pop() || "";
+    const validExts = ["jpg", "jpeg", "png", "webp", "pdf"];
+    const validMimes = ["image/jpeg", "image/jpg", "image/png", "image/webp", "application/pdf"];
+    const isValid = validMimes.includes(file.type.toLowerCase()) || validExts.includes(ext);
+
+    if (!isValid) {
+      alert("Por favor selecciona una imagen válida (JPG, PNG, WebP, JPEG) o un archivo PDF.");
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert("El archivo excede el tamaño máximo permitido de 5 MB.");
+    // Permitir hasta 10MB para soportar capturas móviles en alta resolución
+    const MAX_SIZE = 10 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      alert("El archivo excede el tamaño máximo permitido de 10 MB.");
       return;
     }
 
@@ -75,7 +81,7 @@ export function FileUpload({ onFileSelect, selectedFile, error }: FileUploadProp
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/jpeg,image/png,image/webp,application/pdf"
+        accept="image/jpeg,image/png,image/webp,image/jpg,.jpg,.jpeg,.png,.webp,application/pdf"
         className="hidden"
         onChange={(e) => {
           if (e.target.files && e.target.files[0]) {
@@ -121,7 +127,7 @@ export function FileUpload({ onFileSelect, selectedFile, error }: FileUploadProp
                 Arrastra tu comprobante aquí o pulsa para explorar
               </p>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                Archivos JPG, PNG, WebP o PDF (Máximo 5 MB)
+                Archivos JPG, PNG, WebP o PDF (Máximo 10 MB)
               </p>
             </div>
 

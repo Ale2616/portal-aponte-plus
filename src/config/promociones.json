@@ -1,0 +1,22 @@
+[
+  {
+    "id": "promo-100m",
+    "tag": "🔥 Plan Recomendado",
+    "titulo": "Pásate a 100 Megas simétricas por solo $10.000 más",
+    "descripcion": "Disfruta de máxima velocidad para streaming en 4K, teletrabajo y juegos en línea sin lag con fibra óptica dedicada.",
+    "botonTexto": "Pedir Upgrade",
+    "icono": "Zap",
+    "gradiente": "from-blue-600 via-indigo-600 to-violet-700",
+    "whatsappMensaje": "Hola, soy cliente de Internet Aponte Plus y me interesa la promoción para pasarme a 100 Megas simétricas por $10.000 más."
+  },
+  {
+    "id": "promo-referidos",
+    "tag": "🎁 Plan Amigos",
+    "titulo": "Recomienda a un vecino y recibe 50% de descuento en tu próxima factura",
+    "descripcion": "Comparte la mejor conexión de la región. Cuando tu referido instale el servicio, ambos reciben un beneficio especial.",
+    "botonTexto": "Referir un Vecino",
+    "icono": "Users",
+    "gradiente": "from-emerald-600 via-teal-600 to-cyan-700",
+    "whatsappMensaje": "Hola, quiero referir a un vecino en Internet Aponte Plus para aprovechar la promoción del 50% de descuento."
+  }
+]

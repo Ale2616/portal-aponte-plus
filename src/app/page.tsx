@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Header } from "@/components/Header";
+import { GlobalAlertBanner } from "@/components/GlobalAlertBanner";
 import { SearchScreen } from "@/components/SearchScreen";
 import { StatusCard } from "@/components/StatusCard";
 import { InvoiceList } from "@/components/InvoiceList";
@@ -15,7 +16,9 @@ import { ClientProfile, Invoice, PaymentReportResult } from "@/lib/types";
 import { branding } from "@/config/branding";
 import { toast } from "sonner";
 import { DirectPaymentCard } from "@/components/DirectPaymentCard";
-import { Loader2 } from "lucide-react";
+import { PromoCarousel } from "@/components/PromoCarousel";
+import { NetworkUsageCard } from "@/components/NetworkUsageCard";
+import { Loader2, CheckCircle2 } from "lucide-react";
 
 function PortalContent() {
   const searchParams = useSearchParams();
@@ -33,6 +36,7 @@ function PortalContent() {
   const [isBankAccountsOpen, setIsBankAccountsOpen] = useState(false);
   const [isFaqOpen, setIsFaqOpen] = useState(false);
   const [selectedInvoiceForPdf, setSelectedInvoiceForPdf] = useState<Invoice | null>(null);
+  const [paymentReportSuccessData, setPaymentReportSuccessData] = useState<PaymentReportResult | null>(null);
 
   // Buscar cliente por documento de identidad
   const handleSearch = useCallback(
@@ -58,7 +62,29 @@ function PortalContent() {
         }
 
         setClient(data.cliente);
-        setInvoices(data.facturas || []);
+        let clientInvoices = data.facturas || [];
+
+        // Sincronización proactiva con /api/facturas para garantizar la extracción total de facturas históricas
+        try {
+          const serviceId = data.cliente?.servicio?.idServicio || "";
+          const usuario = data.cliente?.usuario || data.usuario || "";
+          const fParams = new URLSearchParams();
+          if (serviceId) fParams.set("id_servicio", String(serviceId));
+          if (cleanDoc) fParams.set("cedula", cleanDoc);
+          if (usuario) fParams.set("usuario", usuario);
+
+          const fRes = await fetch(`/api/facturas?${fParams.toString()}`);
+          if (fRes.ok) {
+            const fData = await fRes.json();
+            if (fData.success && Array.isArray(fData.facturas) && fData.facturas.length > 0) {
+              clientInvoices = fData.facturas;
+            }
+          }
+        } catch (fErr) {
+          console.warn("[Facturas Sync Warning]:", fErr);
+        }
+
+        setInvoices(clientInvoices);
 
         // Actualizar URL con query param para permitir recargar o compartir
         if (typeof window !== "undefined") {
@@ -106,6 +132,7 @@ function PortalContent() {
     setClient(null);
     setInvoices([]);
     setError(null);
+    setPaymentReportSuccessData(null);
     setHasLoggedOut(true);
 
     if (typeof window !== "undefined") {
@@ -126,8 +153,9 @@ function PortalContent() {
     setIsPaymentModalOpen(true);
   };
 
-  // Actualizar factura tras reporte exitoso
+  // Actualizar factura tras reporte exitoso y activar mensaje de confirmación
   const handleSuccessReport = (result: PaymentReportResult) => {
+    setPaymentReportSuccessData(result);
     setInvoices((prev) =>
       prev.map((inv) =>
         inv.id === result.facturaFolio || inv.folio === result.facturaFolio
@@ -141,6 +169,9 @@ function PortalContent() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50/50 dark:bg-[#090d16] text-slate-900 dark:text-slate-100 transition-colors">
+      {/* Aviso Global de Mantenimiento (Controlado desde Panel Admin) */}
+      <GlobalAlertBanner />
+
       {/* Cabecera con botón Cambiar */}
       <Header
         client={client}
@@ -159,7 +190,37 @@ function PortalContent() {
           />
         ) : (
           <div className="space-y-8 animate-in fade-in duration-300">
-            {/* Saludo y Tarjeta Principal de Saldo con botón Cambiar */}
+            {/* Mensaje de Confirmación de Pago Exitoso */}
+            {paymentReportSuccessData && (
+              <div className="rounded-3xl p-5 sm:p-6 bg-emerald-500/10 border-2 border-emerald-500/30 text-emerald-950 dark:text-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in zoom-in-95 duration-200">
+                <div className="flex items-start gap-3.5">
+                  <div className="p-2.5 rounded-2xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex-shrink-0">
+                    <CheckCircle2 className="w-6 h-6" strokeWidth={2} />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                      ¡Comprobante enviado con éxito!
+                    </h4>
+                    <p className="text-xs sm:text-sm text-emerald-700 dark:text-emerald-300/90 mt-0.5">
+                      Su pago será verificado en el sistema en un transcurso de 30 a 60 minutos. Radicado asignado:{" "}
+                      <strong className="font-sans font-bold tracking-tight tabular-nums">{paymentReportSuccessData.radicado}</strong>.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPaymentReportSuccessData(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-all self-start sm:self-auto cursor-pointer"
+                >
+                  Entendido
+                </button>
+              </div>
+            )}
+
+            {/* 1. Carrusel de Publicidad y Promociones */}
+            <PromoCarousel />
+
+            {/* 2. Saludo y Tarjeta Principal de Saldo con botón Cambiar */}
             <StatusCard
               client={client}
               onOpenPayment={() => handleOpenPayment()}
@@ -167,10 +228,13 @@ function PortalContent() {
               onChangeUser={handleLogout}
             />
 
-            {/* Canales de Pago Directo (Estilo Fintech) */}
+            {/* 3. Tarjeta de Métricas y Tráfico de Red */}
+            <NetworkUsageCard client={client} />
+
+            {/* 4. Canales de Pago Directo (Estilo Fintech) */}
             <DirectPaymentCard onOpenReport={() => handleOpenPayment()} />
 
-            {/* Listado de Facturas */}
+            {/* 5. Historial Completo de Facturas con Pestañas */}
             <InvoiceList
               invoices={invoices}
               onViewPdf={(invoice) => setSelectedInvoiceForPdf(invoice)}

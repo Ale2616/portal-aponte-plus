@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { branding } from "@/config/branding";
+import { useConfig } from "@/context/ConfigContext";
 import { Smartphone, QrCode, Copy, Check, ShieldCheck, CreditCard } from "lucide-react";
 import { toast } from "sonner";
 
@@ -10,6 +11,7 @@ interface DirectPaymentCardProps {
 }
 
 export function DirectPaymentCard({ onOpenReport }: DirectPaymentCardProps) {
+  const { config } = useConfig();
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const handleCopy = (text: string, id: string, name: string) => {
@@ -38,14 +40,18 @@ export function DirectPaymentCard({ onOpenReport }: DirectPaymentCardProps) {
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800/80 text-[11px] font-medium text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" strokeWidth={1.75} />
-            <span>Titular: <strong className="text-slate-800 dark:text-slate-200">{branding.companyName}</strong></span>
+            <span>Titular: <strong className="text-slate-800 dark:text-slate-200">{config.companyInfo.accountHolder || branding.companyName}</strong></span>
           </div>
         </div>
       </div>
 
-      {/* Grid de métodos de pago directo: Nequi, Daviplata, Bre-B */}
+      {/* Grid de métodos de pago directo: Nequi, Bancolombia, Bre-B */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {branding.paymentMethods.map((method) => {
+          const isNequiOrBreb = method.id.includes("nequi") || method.id.includes("bre-b");
+          const displayNumber = isNequiOrBreb && config.companyInfo.nequiNumber
+            ? config.companyInfo.nequiNumber
+            : method.accountNumber;
           const isCopied = copiedId === method.id;
 
           return (
@@ -55,8 +61,15 @@ export function DirectPaymentCard({ onOpenReport }: DirectPaymentCardProps) {
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700 flex items-center justify-center flex-shrink-0">
-                    {method.iconName === "QrCode" ? (
+                  <div className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700 flex items-center justify-center flex-shrink-0 overflow-hidden shadow-sm">
+                    {method.iconUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={method.iconUrl}
+                        alt={method.name}
+                        className="w-5 h-5 object-contain"
+                      />
+                    ) : method.iconName === "QrCode" ? (
                       <QrCode className="w-4 h-4 text-slate-400 dark:text-zinc-400" strokeWidth={1.75} />
                     ) : (
                       <Smartphone className="w-4 h-4 text-slate-400 dark:text-zinc-400" strokeWidth={1.75} />
@@ -79,13 +92,13 @@ export function DirectPaymentCard({ onOpenReport }: DirectPaymentCardProps) {
 
               {/* Número y Botón Copiar */}
               <div className="pt-2 border-t border-slate-200/50 dark:border-slate-800 flex items-center justify-between gap-2">
-                <span className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100">
-                  {method.accountNumber}
+                <span className="font-sans font-bold tracking-tight tabular-nums text-sm text-slate-900 dark:text-slate-100">
+                  {displayNumber}
                 </span>
 
                 <button
                   type="button"
-                  onClick={() => handleCopy(method.accountNumber, method.id, method.name)}
+                  onClick={() => handleCopy(displayNumber, method.id, method.name)}
                   className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
                     isCopied
                       ? "bg-emerald-600 text-white"

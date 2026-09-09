@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { sanitizeDocument } from "@/lib/utils";
-import { isInvoiceReported } from "@/lib/wisphub";
-import fs from "fs";
-import path from "path";
-import { Invoice } from "@/lib/types";
+import { getClientByDocument } from "@/lib/wisphub";
 
 const ConsultarSchema = z.object({
   documento: z
@@ -12,36 +9,6 @@ const ConsultarSchema = z.object({
     .min(1, "Debes ingresar un número de documento")
     .max(30, "El documento es demasiado largo"),
 });
-
-// Cache en memoria para lectura rápida
-let cachedClientesList: any[] | null = null;
-let lastCacheTime = 0;
-
-function getClientesList(): any[] {
-  const now = Date.now();
-  if (cachedClientesList && now - lastCacheTime < 30000) {
-    return cachedClientesList;
-  }
-
-  try {
-    const jsonPath = path.join(process.cwd(), "src", "data", "clientes.json");
-    if (fs.existsSync(jsonPath)) {
-      const raw = fs.readFileSync(jsonPath, "utf-8");
-      const parsed = JSON.parse(raw);
-      if (parsed && parsed.clientes) {
-        cachedClientesList = Array.isArray(parsed.clientes)
-          ? parsed.clientes
-          : Object.values(parsed.clientes);
-        lastCacheTime = now;
-        return cachedClientesList || [];
-      }
-    }
-  } catch (err) {
-    console.error("[API Consultar] Error al leer src/data/clientes.json:", err);
-  }
-
-  return [];
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -63,57 +30,68 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. OBTENER LISTA DE CLIENTES DESDE clientes.json
-    const allClients = getClientesList();
-
-    if (!allClients || allClients.length === 0) {
+    // 1. Verificación de seguridad de credenciales en el servidor
+    const apiKey = process.env.WISPHUB_API_KEY;
+    if (!apiKey || apiKey.trim() === "") {
       return NextResponse.json(
-        { success: false, error: "La base de datos de clientes no está disponible." },
+        {
+          success: false,
+          error: "Error de sincronización con WispHub: Credenciales (WISPHUB_API_KEY) no configuradas en el servidor.",
+        },
         { status: 500 }
       );
     }
 
-    // 2. BUSCAR COINCIDENCIA EXACTA POR CÉDULA / DNI
-    // Regla estricta: c.cedula.toString().trim() === cleanDocument.toString().trim()
-    const foundClient = allClients.find((c: any) => {
-      if (!c || !c.cedula) return false;
-      const cCedula = c.cedula.toString().trim();
-      const sCedula = sanitizeDocument(cCedula);
-      return cCedula === cleanDocument || sCedula === cleanDocument || c.id === `ap_${cleanDocument}`;
-    });
+    // 2. Consulta real a la API de WispHub
+    const result = await getClientByDocument(cleanDocument);
 
-    // 3. SI NO EXISTE, RETORNAR ERROR 404 CLARO ("Abonado no encontrado")
-    // NUNCA retornar clientes[0] ni clientes por defecto
-    if (!foundClient) {
+    if (!result.success || !result.cliente) {
+      const status = result.statusCode || (result.error?.includes("no encontrado") ? 404 : 502);
       return NextResponse.json(
         {
           success: false,
-          error: "Abonado no encontrado. Por favor verifica el número de documento e intenta de nuevo.",
+          error: result.error || "Error de sincronización con WispHub.",
         },
-        { status: 404 }
+        { status }
       );
     }
 
-    // 4. PREPARAR FACTURAS CON ESTADO DE REPORTE EN SESIÓN
-    const rawInvoices: Invoice[] = foundClient.invoices || [];
-    const updatedInvoices = rawInvoices.map((inv) => ({
-      ...inv,
-      tieneReportePendiente: isInvoiceReported(inv.id),
-    }));
+    const { cliente, facturas = [] } = result;
 
-    // Separar invoices del perfil del cliente para respuesta limpia
-    const { invoices, ...clientProfile } = foundClient;
+    const pendientes = facturas.filter(
+      (inv) => inv.estado !== "pagada" && (inv.saldoPendiente > 0 || inv.estado === "pendiente" || inv.estado === "vencida")
+    );
+    const historial = facturas.filter(
+      (inv) => inv.estado === "pagada" || inv.saldoPendiente === 0
+    );
+    const totalPendiente = pendientes.reduce((acc, inv) => acc + (inv.saldoPendiente || inv.total || 0), 0);
 
+    // 3. Respuesta estandarizada para el frontend y campos normalizados requeridos
     return NextResponse.json({
       success: true,
-      source: "clientes.json",
-      cliente: clientProfile,
-      facturas: updatedInvoices,
+      source: "wisphub_api",
+      cliente,
+      facturas,
+      pendientes,
+      historial,
+      totalPendiente,
+      nombre: cliente.nombreCompleto,
+      cedula: cliente.cedula,
+      usuario: cliente.usuario,
+      plan: cliente.plan.nombre,
+      valor: cliente.plan.precioMensual,
+      estado: cliente.estadoServicio,
+      fecha_corte: cliente.servicio.fechaCorte,
+      saldo_pendiente: cliente.saldoTotalPendiente,
+      ip: cliente.servicio.ip,
     });
   } catch (err: any) {
     console.error("[API /cliente/consultar Error]:", err);
     return NextResponse.json(
-      { success: false, error: "Error interno al procesar la consulta. Inténtalo de nuevo." },
+      {
+        success: false,
+        error: "Error de sincronización con WispHub: Fallo inesperado al procesar la solicitud.",
+      },
       { status: 500 }
     );
   }

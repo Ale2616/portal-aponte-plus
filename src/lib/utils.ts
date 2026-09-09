@@ -18,24 +18,50 @@ export function formatCurrency(amount: number, currency: string = "COP"): string
 export function formatDate(dateString: string): string {
   if (!dateString) return "";
   try {
-    const parts = dateString.split("-");
+    const trimmed = dateString.trim();
+    // Soporte para formato DD/MM/YYYY de WispHub
+    if (trimmed.includes("/")) {
+      const parts = trimmed.split("/");
+      if (parts.length === 3) {
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const year = parseInt(parts[2], 10);
+        const date = new Date(year, month, day);
+        if (!isNaN(date.getTime())) {
+          return new Intl.DateTimeFormat("es-CO", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+          }).format(date);
+        }
+      }
+    }
+
+    // Soporte para formato YYYY-MM-DD
+    const parts = trimmed.split("-");
     if (parts.length === 3) {
       const year = parseInt(parts[0], 10);
       const month = parseInt(parts[1], 10) - 1;
       const day = parseInt(parts[2], 10);
       const date = new Date(year, month, day);
+      if (!isNaN(date.getTime())) {
+        return new Intl.DateTimeFormat("es-CO", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        }).format(date);
+      }
+    }
+
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) {
       return new Intl.DateTimeFormat("es-CO", {
         day: "numeric",
         month: "short",
         year: "numeric",
-      }).format(date);
+      }).format(d);
     }
-    const d = new Date(dateString);
-    return new Intl.DateTimeFormat("es-CO", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    }).format(d);
+    return dateString;
   } catch {
     return dateString;
   }
@@ -104,6 +130,17 @@ export function getServiceStatusInfo(status: ServiceStatus) {
         dotColor: "bg-amber-500",
         gradient: "from-amber-600/20 to-orange-900/20",
         description: "Servicio en pausa por solicitud o mantenimiento.",
+      };
+    case "en_pruebas":
+      return {
+        label: "Servicio en Pruebas",
+        shortLabel: "En Pruebas",
+        color: "text-blue-500 dark:text-blue-400",
+        bgColor: "bg-blue-500/10 dark:bg-blue-500/20",
+        borderColor: "border-blue-500/30",
+        dotColor: "bg-blue-500",
+        gradient: "from-blue-600/20 to-indigo-900/20",
+        description: "Servicio en periodo de verificación técnica o instalación reciente.",
       };
     default:
       return {

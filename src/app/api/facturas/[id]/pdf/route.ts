@@ -8,11 +8,9 @@ export async function GET(
 ) {
   const { id } = await params;
 
-  // Mock invoice data for display/printing
+  // Datos de factura a tarifa plana (exenta de IVA)
   const folio = `FAC-${id.toUpperCase().replace(/[^A-Z0-9]/g, "-")}`;
-  const total = 85000;
-  const subtotal = 71429;
-  const iva = 13571;
+  const total = 50000;
   const fechaEmision = "2026-03-01";
   const fechaVencimiento = "2026-03-18";
 
@@ -176,7 +174,7 @@ export async function GET(
   <div class="invoice-card">
     <div class="header">
       <div>
-        <img src="/logo.jpg" alt="${branding.companyName}" style="height: 60px; width: auto; margin-bottom: 10px; display: block; object-fit: contain;">
+        <img src="/logo.jpg" alt="${branding.companyName}" style="height: 100px; width: auto; margin-bottom: 12px; display: block; object-fit: contain;">
         <h1 class="company-title">${branding.companyName}</h1>
         <p class="company-sub">
           ${branding.legalName}<br>
@@ -202,10 +200,9 @@ export async function GET(
       </div>
       <div class="meta-box">
         <h4>Canales de Pago Habilitados</h4>
-        <p>
-          Nequi / Daviplata: ${branding.paymentMethods[0]?.accountNumber || ""}<br>
-          Bancolombia: ${branding.paymentMethods[2]?.accountNumber || ""}<br>
-          Convenio Efecty: 110582
+          Nequi: ${branding.paymentMethods[0]?.accountNumber || ""}<br>
+          Bancolombia (Ahorros): ${branding.paymentMethods[1]?.accountNumber || "84758122483"}<br>
+          Bre-B: ${branding.paymentMethods[2]?.accountNumber || ""}<br>
         </p>
       </div>
     </div>
@@ -223,23 +220,19 @@ export async function GET(
         <tr>
           <td>
             <strong>Servicio de Internet Banda Ancha FTTH</strong><br>
-            <span style="font-size: 12px; color: #64748b;">Plan Fibra Óptica Residencial de Alta Velocidad</span>
+            <span style="font-size: 12px; color: #64748b;">Plan Fibra Óptica Residencial de Alta Velocidad (Tarifa Plana Exenta de IVA)</span>
           </td>
           <td style="text-align: center;">1</td>
-          <td style="text-align: right;">${formatCurrency(subtotal)}</td>
-          <td style="text-align: right;">${formatCurrency(subtotal)}</td>
+          <td style="text-align: right;">${formatCurrency(total)}</td>
+          <td style="text-align: right; font-weight: bold;">${formatCurrency(total)}</td>
         </tr>
       </tbody>
     </table>
 
     <div class="totals">
       <div class="total-row">
-        <span>Subtotal</span>
-        <span>${formatCurrency(subtotal)}</span>
-      </div>
-      <div class="total-row">
-        <span>IVA (19%)</span>
-        <span>${formatCurrency(iva)}</span>
+        <span>Tarifa Mensual Neta</span>
+        <span>${formatCurrency(total)}</span>
       </div>
       <div class="total-row grand">
         <span>Total a Pagar</span>

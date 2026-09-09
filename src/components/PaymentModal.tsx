@@ -140,16 +140,29 @@ export function PaymentModal({
 
     try {
       const formData = new FormData();
+      formData.append("archivo", selectedFile);
+      formData.append("comprobante", selectedFile);
+      formData.append("nombre", client.nombreCompleto);
+      formData.append("nombre_cliente", client.nombreCompleto);
+      formData.append("cedula", client.cedula);
+      formData.append("cedula_cliente", client.cedula);
+      formData.append("plan", client.plan.nombre);
+      formData.append("plan_cliente", client.plan.nombre);
+      formData.append("monto", data.monto.toString());
+      formData.append("metodo_pago", currentMethod?.name || data.metodo_pago);
+      formData.append("referencia", data.referencia);
+      formData.append("fecha_pago", data.fecha_pago);
       formData.append("id_factura", data.id_factura);
       formData.append("id_cliente", client.id);
-      formData.append("referencia", data.referencia);
-      formData.append("metodo_pago", currentMethod?.name || data.metodo_pago);
-      formData.append("monto", data.monto.toString());
-      formData.append("fecha_pago", data.fecha_pago);
+      formData.append(
+        "nodo_cliente",
+        typeof client.servicio.nodo === "object"
+          ? (client.servicio.nodo as any)?.nombre || "Nodo Principal"
+          : String(client.servicio.nodo || "Nodo Principal")
+      );
       if (data.observaciones) {
         formData.append("observaciones", data.observaciones);
       }
-      formData.append("comprobante", selectedFile);
 
       const res = await fetch("/api/facturas/reportar-pago", {
         method: "POST",
@@ -163,11 +176,12 @@ export function PaymentModal({
       }
 
       triggerConfetti();
-      toast.success("Comprobante reportado exitosamente", {
-        description: `Radicado: ${json.radicado}`,
+      toast.success("¡Comprobante enviado con éxito!", {
+        description: "Su pago será verificado en el sistema en un transcurso de 30 a 60 minutos.",
+        duration: 8000,
       });
-      setSuccessData(json);
       onSuccessReport(json);
+      handleModalClose();
     } catch (err: any) {
       console.error(err);
       toast.error("Error al reportar pago", {
@@ -239,22 +253,22 @@ export function PaymentModal({
               </div>
 
               {/* Receipt Ticket Box */}
-              <div className="max-w-md mx-auto bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 rounded-2xl p-4 text-left space-y-2.5 font-mono text-xs">
+              <div className="max-w-md mx-auto bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 rounded-2xl p-4 text-left space-y-2.5 font-sans font-medium text-xs tracking-tight tabular-nums">
                 <div className="flex justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
-                  <span className="text-slate-400 font-sans">Radicado:</span>
-                  <span className="font-bold text-slate-900 dark:text-slate-100">
+                  <span className="text-slate-400">Radicado:</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100 font-sans tracking-tight tabular-nums">
                     {successData.radicado}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400 font-sans">Abonado:</span>
-                  <span className="text-slate-800 dark:text-slate-200 font-sans truncate max-w-[200px]">
+                  <span className="text-slate-400">Abonado:</span>
+                  <span className="text-slate-800 dark:text-slate-200 truncate max-w-[200px]">
                     {client.nombreCompleto}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400 font-sans">Monto:</span>
-                  <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                  <span className="text-slate-400">Monto:</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400 font-sans tracking-tight tabular-nums">
                     {formatCurrency(successData.monto)}
                   </span>
                 </div>
@@ -342,7 +356,14 @@ export function PaymentModal({
                         }`}
                       >
                         <div className="flex items-center gap-1.5">
-                          {m.iconName === "QrCode" ? (
+                          {m.iconUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={m.iconUrl}
+                              alt={m.name}
+                              className="w-4 h-4 object-contain flex-shrink-0"
+                            />
+                          ) : m.iconName === "QrCode" ? (
                             <QrCode className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" strokeWidth={1.75} />
                           ) : (
                             <Smartphone className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" strokeWidth={1.75} />
@@ -351,7 +372,7 @@ export function PaymentModal({
                             {m.shortName}
                           </span>
                         </div>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-1 truncate">
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-sans font-semibold tracking-tight tabular-nums mt-1 truncate">
                           {m.accountNumber}
                         </span>
                       </button>
@@ -367,7 +388,7 @@ export function PaymentModal({
                     <span className="text-[11px] text-slate-400 block">
                       Transferir a {currentMethod.name} ({currentMethod.accountHolder}):
                     </span>
-                    <span className="font-mono font-bold text-slate-900 dark:text-slate-100 text-sm">
+                    <span className="font-sans font-bold tracking-tight tabular-nums text-slate-900 dark:text-slate-100 text-sm">
                       {currentMethod.accountNumber}
                     </span>
                   </div>
@@ -422,7 +443,7 @@ export function PaymentModal({
                     step="100"
                     placeholder="85000"
                     {...register("monto", { valueAsNumber: true })}
-                    className="w-full px-3.5 py-2.5 rounded-xl text-sm font-medium font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                    className="w-full px-3.5 py-2.5 rounded-xl text-sm font-semibold font-sans tracking-tight tabular-nums bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400"
                   />
                   {errors.monto && (
                     <p className="text-xs text-rose-500 mt-1">{errors.monto.message}</p>

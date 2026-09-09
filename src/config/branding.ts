@@ -5,6 +5,7 @@ export interface PaymentMethod {
   type: 'wallet' | 'bank' | 'cash' | 'gateway';
   badge: string;
   iconName: string;
+  iconUrl?: string;
   accountNumber: string;
   accountType?: string;
   accountHolder: string;
@@ -58,6 +59,7 @@ export const branding: BrandingConfig = {
       type: "wallet",
       badge: "Inmediato",
       iconName: "Smartphone",
+      iconUrl: "/nequi-icon.png",
       accountNumber: "311 276 0959",
       accountType: "Billetera Digital",
       accountHolder: "Internet Aponte Plus",
@@ -65,16 +67,17 @@ export const branding: BrandingConfig = {
       allowUpload: true,
     },
     {
-      id: "daviplata",
-      name: "Daviplata",
-      shortName: "Daviplata",
-      type: "wallet",
-      badge: "Inmediato",
-      iconName: "Smartphone",
-      accountNumber: "311 276 0959",
-      accountType: "Billetera Móvil",
+      id: "bancolombia",
+      name: "Bancolombia",
+      shortName: "Bancolombia",
+      type: "bank",
+      badge: "Cuenta de Ahorros",
+      iconName: "Building2",
+      iconUrl: "/bancolombia-icon.png",
+      accountNumber: "84758122483",
+      accountType: "Cuenta de Ahorros",
       accountHolder: "Internet Aponte Plus",
-      instructions: "Pasa plata al número Daviplata indicado y guarda la captura con el código de autorización.",
+      instructions: "Transfiere a la cuenta de ahorros Bancolombia indicada y guarda el comprobante o captura con el número de transacción.",
       allowUpload: true,
     },
     {
@@ -83,7 +86,8 @@ export const branding: BrandingConfig = {
       shortName: "Bre-B",
       type: "bank",
       badge: "Interbancario",
-      iconName: "QrCode",
+      iconName: "BreB",
+      iconUrl: "/breb-icon.png",
       accountNumber: "311 276 0959",
       accountType: "Llave Móvil Interbancaria",
       accountHolder: "Internet Aponte Plus",

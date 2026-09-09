@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { branding } from "@/config/branding";
+import { ConfigProvider } from "@/context/ConfigContext";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -59,20 +60,22 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}
+        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased min-h-screen flex flex-col`}
       >
-        <Toaster
-          position="top-right"
-          richColors
-          closeButton
-          toastOptions={{
-            style: {
-              borderRadius: "1rem",
-              fontSize: "0.875rem",
-            },
-          }}
-        />
-        {children}
+        <ConfigProvider>
+          <Toaster
+            position="top-right"
+            richColors
+            closeButton
+            toastOptions={{
+              style: {
+                borderRadius: "1rem",
+                fontSize: "0.875rem",
+              },
+            }}
+          />
+          {children}
+        </ConfigProvider>
       </body>
     </html>
   );

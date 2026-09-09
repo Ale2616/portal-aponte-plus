@@ -24,6 +24,16 @@ interface StatusCardProps {
   onChangeUser: () => void;
 }
 
+const safeText = (val: any, fallback = ""): string => {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === "string") return val;
+  if (typeof val === "number") return String(val);
+  if (typeof val === "object") {
+    return val.nombre || val.name || val.descripcion || val.id || fallback;
+  }
+  return fallback;
+};
+
 export function StatusCard({ client, onOpenPayment, onOpenBankAccounts, onChangeUser }: StatusCardProps) {
   const statusInfo = getServiceStatusInfo(client.estadoServicio);
   const isCut = client.estadoServicio === "cortado";
@@ -75,12 +85,12 @@ export function StatusCard({ client, onOpenPayment, onOpenBankAccounts, onChange
               <div>
                 <div className="flex items-center gap-1.5">
                   <Wifi className="w-3.5 h-3.5 text-slate-400" strokeWidth={1.75} />
-                  <span className="text-xs font-mono uppercase tracking-wider text-slate-300">
+                  <span className="text-xs uppercase tracking-wider text-slate-300 font-medium">
                     Abonado Fibra Óptica
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-                  ID de Cuenta: {client.id}
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  ID de Cuenta: <span className="font-sans font-semibold tracking-tight tabular-nums text-slate-300">{client.id}</span>
                 </p>
               </div>
             </div>
@@ -100,7 +110,7 @@ export function StatusCard({ client, onOpenPayment, onOpenBankAccounts, onChange
               {hasDebt ? "Saldo Total a Pagar" : "Estado de Cuenta"}
             </span>
             <div className="flex flex-wrap items-baseline gap-3 mt-1">
-              <span className="text-3xl sm:text-4xl lg:text-5xl font-bold font-mono tracking-tight text-white">
+              <span className="text-3xl sm:text-4xl lg:text-5xl font-sans font-bold tracking-tight tabular-nums text-white">
                 {hasDebt ? formatCurrency(client.saldoTotalPendiente) : "$ 0 COP"}
               </span>
 
@@ -117,18 +127,18 @@ export function StatusCard({ client, onOpenPayment, onOpenBankAccounts, onChange
                 <Calendar className="w-3.5 h-3.5 text-slate-400" strokeWidth={1.75} />
                 <span>
                   Fecha límite:{" "}
-                  <strong className="text-white font-medium">
+                  <strong className="text-white font-sans font-semibold tracking-tight tabular-nums">
                     {formatDate(client.servicio.fechaLimitePago)}
                   </strong>
                 </span>
               </div>
               <div className="hidden sm:block text-slate-600">•</div>
               <div className="flex items-center gap-1.5">
-                <Zap className="w-3.5 h-3.5 text-slate-400" strokeWidth={1.75} />
+                <Zap className="w-3.5 h-3.5 text-amber-400" strokeWidth={1.75} />
                 <span>
                   Corte:{" "}
-                  <strong className="text-white font-medium">
-                    Día {client.servicio.diaPago} de cada mes
+                  <strong className="text-white font-sans font-semibold tracking-tight tabular-nums">
+                    Día {client.servicio.diaCorte || client.servicio.diaPago} de cada mes
                   </strong>
                 </span>
               </div>
@@ -144,10 +154,16 @@ export function StatusCard({ client, onOpenPayment, onOpenBankAccounts, onChange
               <p className="text-sm font-bold text-slate-100 truncate">
                 {client.nombreCompleto}
               </p>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-xs font-mono text-slate-400">
+              <div className="flex flex-wrap items-center gap-2 mt-0.5 text-xs text-slate-400">
+                <span className="font-sans font-semibold tracking-tight tabular-nums">
                   C.C. {client.cedula}
                 </span>
+                {(client.celular || client.telefono) && (
+                  <>
+                    <span>•</span>
+                    <span>Tel: {client.celular || client.telefono}</span>
+                  </>
+                )}
                 <button
                   type="button"
                   onClick={onChangeUser}
@@ -180,65 +196,87 @@ export function StatusCard({ client, onOpenPayment, onOpenBankAccounts, onChange
         </div>
       </div>
 
-      {/* Grid de Especificaciones del Servicio */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {/* Plan contratado */}
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-start gap-3">
-          <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-            <Wifi className="w-4 h-4" strokeWidth={1.75} />
+      {/* Grid de Especificaciones Técnicas y de Infraestructura (Alto Contraste y Nitidez) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+        {/* 1. Plan Contratado */}
+        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-700/80 shadow-md backdrop-blur-sm flex items-start gap-3.5">
+          <div className="p-2.5 rounded-xl bg-sky-50 dark:bg-slate-800 text-sky-600 dark:text-sky-400 border border-sky-100 dark:border-slate-700 flex-shrink-0">
+            <Wifi className="w-4 h-4" strokeWidth={2} />
           </div>
-          <div className="min-w-0">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+          <div className="min-w-0 flex-1">
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-300 uppercase tracking-wider block">
               Plan Contratado
             </span>
-            <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate mt-0.5">
+            <p className="text-sm font-extrabold text-slate-900 dark:text-white truncate mt-0.5">
               {client.plan.nombre}
             </p>
-            <div className="flex items-center gap-2 mt-1 text-xs text-slate-500 dark:text-slate-400 font-mono">
-              <span className="flex items-center gap-0.5 text-slate-600 dark:text-slate-300">
-                <ArrowDownCircle className="w-3.5 h-3.5 text-slate-400" strokeWidth={1.75} />
+            <div className="flex items-center gap-2 mt-1 text-xs font-sans font-semibold tracking-tight tabular-nums">
+              <span className="flex items-center gap-0.5 text-emerald-600 dark:text-emerald-300 font-bold">
+                <ArrowDownCircle className="w-3.5 h-3.5" strokeWidth={2} />
                 {client.plan.velocidadBajada}
               </span>
-              <span className="flex items-center gap-0.5 text-slate-600 dark:text-slate-300">
-                <ArrowUpCircle className="w-3.5 h-3.5 text-slate-400" strokeWidth={1.75} />
+              <span className="text-slate-400 dark:text-slate-400">/</span>
+              <span className="flex items-center gap-0.5 text-sky-600 dark:text-sky-300 font-bold">
+                <ArrowUpCircle className="w-3.5 h-3.5" strokeWidth={2} />
                 {client.plan.velocidadSubida}
               </span>
             </div>
-          </div>
-        </div>
-
-        {/* IP y Router */}
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-start gap-3">
-          <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-            <Server className="w-4 h-4" strokeWidth={1.75} />
-          </div>
-          <div className="min-w-0">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-              IP / Equipo ONT
-            </span>
-            <p className="text-sm font-bold font-mono text-slate-900 dark:text-slate-100 truncate mt-0.5">
-              {client.servicio.ip}
-            </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
-              {client.servicio.routerOnt}
+            <p className="text-[11px] text-slate-500 dark:text-slate-300 mt-1">
+              Tarifa Plana: <strong className="font-sans font-bold tracking-tight tabular-nums text-slate-900 dark:text-white">{formatCurrency(client.plan.precioMensual)}</strong>
             </p>
           </div>
         </div>
 
-        {/* Nodo y Ubicación */}
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-start gap-3">
-          <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-            <Building className="w-4 h-4" strokeWidth={1.75} />
+        {/* 2. IP e Infraestructura */}
+        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-700/80 shadow-md backdrop-blur-sm flex items-start gap-3.5">
+          <div className="p-2.5 rounded-xl bg-sky-50 dark:bg-slate-800 text-sky-600 dark:text-sky-400 border border-sky-100 dark:border-slate-700 flex-shrink-0">
+            <Server className="w-4 h-4" strokeWidth={2} />
           </div>
-          <div className="min-w-0">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-              Ubicación / Nodo
+          <div className="min-w-0 flex-1">
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-300 uppercase tracking-wider block">
+              Red e Infraestructura
             </span>
-            <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate mt-0.5">
-              {client.servicio.nodo}
+            <p className="text-sm font-extrabold font-sans tracking-tight tabular-nums text-slate-900 dark:text-white truncate mt-0.5">
+              IP: {safeText(client.servicio.ip, "100.64.0.1")}
             </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
-              {client.direccion}, {client.ciudad}
+            {client.servicio.mac && (
+              <p className="text-xs font-sans font-semibold tracking-tight tabular-nums text-slate-700 dark:text-slate-200 truncate mt-0.5">
+                MAC: {client.servicio.mac}
+              </p>
+            )}
+            <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 truncate mt-0.5">
+              Equipo: {safeText(client.servicio.routerOnt, "Router ONT")}
+            </p>
+            {client.servicio.mikrotik && (
+              <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                Router: {client.servicio.mikrotik}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* 3. Nodo y Ubicación */}
+        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-700/80 shadow-md backdrop-blur-sm flex items-start gap-3.5">
+          <div className="p-2.5 rounded-xl bg-sky-50 dark:bg-slate-800 text-sky-600 dark:text-sky-400 border border-sky-100 dark:border-slate-700 flex-shrink-0">
+            <Building className="w-4 h-4" strokeWidth={2} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-300 uppercase tracking-wider block">
+              Nodo y Ubicación
+            </span>
+            <p className="text-sm font-extrabold text-slate-900 dark:text-white truncate mt-0.5">
+              {safeText(client.servicio.nodo, "Nodo Principal Fibra")}
+            </p>
+            {(client.servicio.sectorial || client.servicio.cajaNap) && (
+              <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate mt-0.5">
+                {client.servicio.cajaNap ? `Caja NAP: ${client.servicio.cajaNap}` : `Sector: ${client.servicio.sectorial}`}
+              </p>
+            )}
+            <p className="text-xs text-slate-600 dark:text-slate-300 truncate mt-0.5">
+              {safeText(client.direccion)}
+            </p>
+            <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate mt-0.5">
+              {client.barrio ? `${client.barrio}, ` : ""}{safeText(client.ciudad)}
             </p>
           </div>
         </div>
