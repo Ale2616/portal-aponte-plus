@@ -1,6 +1,5 @@
-const CACHE_NAME = 'aponte-plus-pwa-v1';
+const CACHE_NAME = 'aponte-plus-pwa-v2';
 const ASSETS_TO_CACHE = [
-  '/',
   '/manifest.json',
   '/logo.jpg',
   '/icons/icon-192x192.png',
@@ -32,8 +31,10 @@ self.addEventListener('fetch', (event) => {
   // Solo interceptar peticiones GET
   if (event.request.method !== 'GET') return;
 
-  // No cachear peticiones dinámicas de API para tener siempre saldos frescos
-  if (event.request.url.includes('/api/')) return;
+  // No interceptar peticiones dinámicas de API ni navegación HTML para servir siempre la versión en vivo
+  if (event.request.url.includes('/api/') || event.request.mode === 'navigate') {
+    return;
+  }
 
   event.respondWith(
     fetch(event.request).catch(() => caches.match(event.request))
