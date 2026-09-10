@@ -8,6 +8,7 @@ import confetti from "canvas-confetti";
 import { toast } from "sonner";
 import { Invoice, ClientProfile, PaymentReportResult } from "@/lib/types";
 import { branding } from "@/config/branding";
+import { useConfig } from "@/context/ConfigContext";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import { FileUpload } from "./FileUpload";
 import {
@@ -174,6 +175,19 @@ export function PaymentModal({
     branding.paymentMethods.find((m) => m.id === currentMethodId) ||
     branding.paymentMethods[0];
 
+  const { config } = useConfig();
+
+  const isCurrentNequi =
+    currentMethod?.id.includes("nequi") || currentMethod?.id.includes("bre-b");
+  const currentAccountNumber =
+    isCurrentNequi && config.companyInfo.nequiNumber
+      ? config.companyInfo.nequiNumber
+      : currentMethod?.accountNumber || "";
+  const currentAccountHolder =
+    isCurrentNequi && config.companyInfo.accountHolder
+      ? config.companyInfo.accountHolder
+      : currentMethod?.accountHolder || "";
+
   useEffect(() => {
     register("monto");
   }, [register]);
@@ -205,8 +219,8 @@ export function PaymentModal({
   if (!isOpen) return null;
 
   const handleCopyAccount = () => {
-    if (!currentMethod) return;
-    const cleanNumber = currentMethod.accountNumber.replace(/\s+/g, "");
+    if (!currentAccountNumber) return;
+    const cleanNumber = currentAccountNumber.replace(/\s+/g, "");
     navigator.clipboard.writeText(cleanNumber);
     setCopiedAccount(true);
     toast.success(`Número copiado: ${cleanNumber}`);
@@ -459,6 +473,12 @@ export function PaymentModal({
                 <div className="grid grid-cols-3 gap-2">
                   {branding.paymentMethods.map((m) => {
                     const isSelected = currentMethodId === m.id;
+                    const isNequi = m.id.includes("nequi") || m.id.includes("bre-b");
+                    const numDisplay =
+                      isNequi && config.companyInfo.nequiNumber
+                        ? config.companyInfo.nequiNumber
+                        : m.accountNumber;
+
                     return (
                       <button
                         key={m.id}
@@ -488,7 +508,7 @@ export function PaymentModal({
                           </span>
                         </div>
                         <span className="text-[10px] text-slate-500 dark:text-slate-400 font-sans font-semibold tracking-tight tabular-nums mt-1 truncate">
-                          {m.accountNumber}
+                          {numDisplay}
                         </span>
                       </button>
                     );
@@ -501,10 +521,10 @@ export function PaymentModal({
                 <div className="rounded-2xl p-3 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 text-xs">
                   <div>
                     <span className="text-[11px] text-slate-400 block">
-                      Transferir a {currentMethod.name} ({currentMethod.accountHolder}):
+                      Transferir a {currentMethod.name} ({currentAccountHolder}):
                     </span>
                     <span className="font-sans font-bold tracking-tight tabular-nums text-slate-900 dark:text-slate-100 text-sm">
-                      {currentMethod.accountNumber}
+                      {currentAccountNumber}
                     </span>
                   </div>
 

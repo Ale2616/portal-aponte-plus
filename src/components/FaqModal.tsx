@@ -1,6 +1,7 @@
 "use client";
 
 import { branding } from "@/config/branding";
+import { useConfig } from "@/context/ConfigContext";
 import { X, HelpCircle, MessageSquare, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { buildWhatsAppUrl } from "@/lib/utils";
@@ -13,6 +14,7 @@ interface FaqModalProps {
 }
 
 export function FaqModal({ isOpen, onClose, clientName, cedula }: FaqModalProps) {
+  const { config } = useConfig();
   const [openIndex, setOpenIndex] = useState<number | null>(0);
 
   if (!isOpen) return null;
@@ -21,8 +23,9 @@ export function FaqModal({ isOpen, onClose, clientName, cedula }: FaqModalProps)
     setOpenIndex(openIndex === index ? null : index);
   };
 
+  const supportPhone = config.companyInfo.supportPhone || branding.supportPhone;
   const whatsappUrl = buildWhatsAppUrl(
-    branding.supportPhone,
+    supportPhone,
     clientName,
     cedula,
     "Consulta desde el Centro de Ayuda"
