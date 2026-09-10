@@ -94,7 +94,7 @@ export function FileUpload({ onFileSelect, selectedFile, error }: FileUploadProp
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onClick={() => fileInputRef.current?.click()}
-          className={`relative border-2 border-dashed rounded-2xl p-6 text-center transition-all duration-200 cursor-pointer flex flex-col items-center justify-center min-h-[170px] w-full ${
+          className={`relative border-2 border-dashed rounded-2xl p-6 text-center transition-all duration-200 cursor-pointer flex items-center justify-center min-h-[180px] w-full ${
             isDragging
               ? "border-slate-500 bg-slate-100/60 dark:bg-slate-800/40"
               : error
@@ -102,24 +102,27 @@ export function FileUpload({ onFileSelect, selectedFile, error }: FileUploadProp
               : "border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30 hover:border-slate-400 dark:hover:border-slate-600 hover:bg-slate-100/50 dark:hover:bg-slate-800/30"
           }`}
         >
-          <div className="flex flex-col items-center justify-center space-y-3 w-full h-full">
+          <div className="flex flex-col items-center justify-center space-y-3 w-full max-w-sm mx-auto">
             <div className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 flex items-center justify-center shadow-sm">
               <UploadCloud className="w-6 h-6 text-slate-500 dark:text-slate-400" strokeWidth={1.75} />
             </div>
 
             <div className="space-y-0.5">
               <p className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200">
-                Arrastra tu comprobante aquí o pulsa para explorar
+                Arrastra tu comprobante aquí o selecciónalo
               </p>
               <p className="text-[11px] text-slate-400">
                 Archivos JPG, PNG, WebP o PDF (Máximo 10 MB)
               </p>
             </div>
 
-            <div className="flex items-center justify-center w-full pt-1" onClick={(e) => e.stopPropagation()}>
+            <div className="pt-1 flex items-center justify-center w-full">
               <button
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  fileInputRef.current?.click();
+                }}
                 className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-sm transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
               >
                 <UploadCloud className="w-4 h-4 text-slate-500 dark:text-slate-400" strokeWidth={1.75} />

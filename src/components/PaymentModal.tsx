@@ -193,12 +193,12 @@ export function PaymentModal({
   }, [register]);
 
   useEffect(() => {
-    if (activeInvoice) {
+    if (isOpen && activeInvoice) {
       setValue("id_factura", activeInvoice.id);
       setValue("monto", activeInvoice.saldoPendiente);
       setMontoDisplay(formatThousands(activeInvoice.saldoPendiente));
     }
-  }, [activeInvoice, setValue]);
+  }, [isOpen, activeInvoice, setValue]);
 
   const handleMontoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const rawInput = e.target.value;
