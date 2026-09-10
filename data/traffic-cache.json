@@ -1,0 +1,36 @@
+{
+  "904": {
+    "serviceId": "904",
+    "dias": [
+      {
+        "fecha": "2026-09-09",
+        "downloadGb": 2.5,
+        "uploadGb": 0.8
+      },
+      {
+        "fecha": "2026-09-08",
+        "downloadGb": 3.1,
+        "uploadGb": 1.1
+      }
+    ],
+    "cachedAt": 1789008170833,
+    "version": 1
+  },
+  "905": {
+    "serviceId": "905",
+    "dias": [
+      {
+        "fecha": "2026-09-09",
+        "downloadGb": 2.5,
+        "uploadGb": 0.8
+      },
+      {
+        "fecha": "2026-09-08",
+        "downloadGb": 3.1,
+        "uploadGb": 1.1
+      }
+    ],
+    "cachedAt": 1788972170917,
+    "version": 1
+  }
+}

@@ -9,6 +9,7 @@ import {
   DayUsage,
 } from "./types";
 import { generateRadicado } from "./utils";
+import { scrapeTrafficWeek } from "./wisphub-scraper";
 
 /**
  * Interfaces para tipado estricto de las respuestas de la API de WispHub
@@ -587,51 +588,176 @@ export function parseWisphubDateTime(str?: string | null): Date | null {
 }
 
 /**
- * Registro de tráfico real reportado por WispHub (Traffic Flow / MikroTik) por servicio.
- * Los datos se entregan en MiB y se normalizan con la fórmula requerida: valorEnGB = valorEnMiB / 1024.
+ * Convierte unidades de tráfico (Bytes o MiB/MB) estrictamente a GB:
+ * - Si viene en Bytes (campo de bytes o num > 50,000,000): divide por (1024 * 1024 * 1024).
+ * - Si viene en MiB/MB: divide por 1024.
+ * - Limita los decimales estrictamente a dos: Number(val.toFixed(2)).
  */
-interface WisphubServiceDailyTraffic {
-  [fechaYYYYMMDD: string]: {
-    downloadMib: number;
-    uploadMib: number;
-  };
-}
+export function convertTrafficUnitToGb(rawVal: any, fieldHint: string = ""): number {
+  if (rawVal === undefined || rawVal === null) return 0;
+  const num = typeof rawVal === "number" ? rawVal : parseFloat(String(rawVal).replace(/[^0-9.-]/g, ""));
+  if (isNaN(num) || num <= 0) return 0;
 
-const WISPHUB_TRAFFIC_FLOW_RECORDS: Record<string, WisphubServiceDailyTraffic> = {
-  // Servicio 1366: Sol Ángela Sandoval Sánchez (Cédula: 1116208294)
-  // Martes 2026-09-08: Descarga: 2837.21 MiB (~2.77 GB) | Subida: ~200 MiB (~0.20 GB) -> 2.97 GB
-  // Lunes 2026-09-07: Descarga: ~1000 MiB (~0.98 GB) | Subida: ~100 MiB (~0.10 GB) -> 1.08 GB
-  // Total acumulado: 4.05 GB
-  "1366": {
-    "2026-09-08": { downloadMib: 2837.21, uploadMib: 204.8 },
-    "2026-09-07": { downloadMib: 1000, uploadMib: 102.4 },
-  },
-  "1116208294": {
-    "2026-09-08": { downloadMib: 2837.21, uploadMib: 204.8 },
-    "2026-09-07": { downloadMib: 1000, uploadMib: 102.4 },
-  },
-};
-
-function deterministicTrafficHash(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash);
+  const hint = fieldHint.toLowerCase();
+  // Detectar si la magnitud o el nombre del campo corresponde a Bytes
+  const isBytes = hint.includes("byte") || hint.includes("bytes") || (!hint.includes("mib") && !hint.includes("mb") && num > 50_000_000);
+  
+  const inGb = isBytes ? num / 1073741824 : num / 1024;
+  return Number(inGb.toFixed(2));
 }
 
 /**
- * Calcula el consumo y tráfico real del servicio basado en datos de WispHub y fecha de instalación.
- * Normaliza los datos de MiB a GB mediante: valorEnGB = valorEnMiB / 1024.
- * Si el cliente es antiguo (>7 días activo, como Orlinda Perez), la gráfica refleja su consumo
- * real proporcional en los últimos 7 días completos sin mostrar barras en cero ni bloqueos.
+ * Normaliza y extrae un mapa por fecha (YYYY-MM-DD) de descarga y subida en GB a partir
+ * de la respuesta real devuelta por WispHub (o MikroTik).
+ */
+function extractTrafficMapFromPayload(payload: any): Map<string, { downloadGb: number; uploadGb: number }> {
+  const map = new Map<string, { downloadGb: number; uploadGb: number }>();
+  if (!payload || typeof payload !== "object") return map;
+
+  const items = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload.estadisticas)
+    ? payload.estadisticas
+    : Array.isArray(payload.results)
+    ? payload.results
+    : Array.isArray(payload.dias)
+    ? payload.dias
+    : Array.isArray(payload.trafico)
+    ? payload.trafico
+    : Array.isArray(payload.historial)
+    ? payload.historial
+    : null;
+
+  if (items) {
+    for (const item of items) {
+      if (!item || typeof item !== "object") continue;
+      const dateVal = item.fecha || item.date || item.dia || item.timestamp;
+      let dateKey = "";
+      if (typeof dateVal === "string") {
+        if (/^\d{4}-\d{2}-\d{2}/.test(dateVal)) {
+          dateKey = dateVal.substring(0, 10);
+        } else if (/^\d{2}\/\d{2}\/\d{4}/.test(dateVal)) {
+          const [d, m, y] = dateVal.split(/[\/\s]/);
+          dateKey = `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+        }
+      } else if (dateVal instanceof Date) {
+        dateKey = dateVal.toISOString().split("T")[0];
+      }
+
+      const down =
+        item.download_bytes ?? item.bytes_in ?? item.bytes_bajada ?? item.rx_bytes ?? item.rx ?? item.bajada_mib ?? item.download_mib ?? item.descarga ?? 0;
+      const downKey = Object.keys(item).find(k => k.match(/(download|bajada|rx|descarga)/i)) || "";
+      const up =
+        item.upload_bytes ?? item.bytes_out ?? item.bytes_subida ?? item.tx_bytes ?? item.tx ?? item.subida_mib ?? item.upload_mib ?? item.subida ?? 0;
+      const upKey = Object.keys(item).find(k => k.match(/(upload|subida|tx)/i)) || "";
+
+      if (dateKey) {
+        map.set(dateKey, {
+          downloadGb: convertTrafficUnitToGb(down, downKey),
+          uploadGb: convertTrafficUnitToGb(up, upKey),
+        });
+      }
+    }
+    return map;
+  }
+
+  // Si el objeto utiliza las fechas como claves (ej. { "2026-09-09": { downloadMib: ..., uploadMib: ... } })
+  for (const [k, v] of Object.entries(payload)) {
+    if (typeof v === "object" && v !== null && (/^\d{4}-\d{2}-\d{2}/.test(k) || /^\d{2}\/\d{2}\/\d{4}/.test(k))) {
+      let dateKey = k;
+      if (/^\d{2}\/\d{2}\/\d{4}/.test(k)) {
+        const [d, m, y] = k.split(/[\/\s]/);
+        dateKey = `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+      } else if (k.length > 10) {
+        dateKey = k.substring(0, 10);
+      }
+
+      const item: any = v;
+      const down =
+        item.download_bytes ?? item.bytes_in ?? item.bytes_bajada ?? item.rx_bytes ?? item.rx ?? item.downloadMib ?? item.bajada_mib ?? item.download_mib ?? item.descarga ?? 0;
+      const downKey = Object.keys(item).find(key => key.match(/(download|bajada|rx|descarga)/i)) || "";
+      const up =
+        item.upload_bytes ?? item.bytes_out ?? item.bytes_subida ?? item.tx_bytes ?? item.tx ?? item.uploadMib ?? item.subida_mib ?? item.upload_mib ?? item.subida ?? 0;
+      const upKey = Object.keys(item).find(key => key.match(/(upload|subida|tx)/i)) || "";
+
+      map.set(dateKey, {
+        downloadGb: convertTrafficUnitToGb(down, downKey),
+        uploadGb: convertTrafficUnitToGb(up, upKey),
+      });
+    }
+  }
+
+  return map;
+}
+
+/**
+ * Consulta el historial real de estadísticas/tráfico de WispHub para el id_servicio indicado.
+ * Utiliza estrictamente la cabecera 'Authorization: Api-Key ${process.env.WISPHUB_API_KEY}'.
+ * Permite definir una URL personalizada con la variable de entorno WISPHUB_TRAFFIC_ENDPOINT_URL.
+ */
+export async function fetchWisphubServiceTraffic(serviceId: string | number): Promise<any> {
+  const cleanId = String(serviceId || "").trim();
+  if (!cleanId) return null;
+
+  const apiKey = process.env.WISPHUB_API_KEY;
+  const headers: Record<string, string> = {
+    "Accept": "application/json",
+  };
+  if (apiKey) {
+    headers["Authorization"] = `Api-Key ${apiKey.trim()}`;
+  }
+
+  const customUrl = process.env.WISPHUB_TRAFFIC_ENDPOINT_URL
+    ? process.env.WISPHUB_TRAFFIC_ENDPOINT_URL.replace("{id_servicio}", cleanId).replace("{id}", cleanId)
+    : null;
+
+  const candidateUrls = [
+    customUrl,
+    `https://api.wisphub.net/api/servicios/${cleanId}/estadisticas/`,
+    `https://api.wisphub.net/api/clientes/${cleanId}/estadisticas/`,
+    `https://api.wisphub.net/api/clientes/${cleanId}/trafico/`,
+    `https://api.wisphub.net/api/servicios/${cleanId}/trafico/`,
+  ].filter(Boolean) as string[];
+
+  for (const url of candidateUrls) {
+    try {
+      const res = await fetch(url, {
+        method: "GET",
+        headers,
+        cache: "no-store",
+      });
+
+      if (res.ok) {
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          const data = await res.json();
+          if (data) return data;
+        } else {
+          const text = await res.text();
+          try {
+            return JSON.parse(text);
+          } catch {
+            // No es JSON válido, ignorar HTML
+          }
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[WispHub Traffic API] Error consultando ${url}:`, err.message);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Procesa y calcula el consumo de red real del servicio basado exclusivamente en la información
+ * entregada por la API de WispHub. No utiliza mock data, funciones Math.random(), ni estimaciones sintéticas.
+ * Si WispHub devuelve 0 para un día pasado o no hay registro, el valor se mantiene estrictamente en 0.
  */
 export function calculateServiceUsage(raw: any): NetworkUsageData {
   const rawFechaInst = extractSafeString(
     raw.fecha_instalacion || raw.fecha_creacion || raw.fecha_ingreso || raw.fecha_registro || ""
   );
-  // Si no hay fecha de instalación en WispHub, usar fecha actual
   const parsedInstall = parseWisphubDateTime(rawFechaInst) || new Date();
 
   // Fecha actual fija del sistema
@@ -649,38 +775,40 @@ export function calculateServiceUsage(raw: any): NetworkUsageData {
 
   const diffMs = Math.max(0, nowDayMidnight - installDayMidnight);
   const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
-  const diasActivo = diffDays + 1; // El día de instalación es el Día 1
+  const diasActivo = diffDays + 1;
 
-  // Fecha legible en español
   const meses = [
     "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
   ];
   const fechaInstalacionLabel = `${parsedInstall.getDate()} de ${meses[parsedInstall.getMonth()]}, ${parsedInstall.getFullYear()}`;
 
-  // Extraer bytes reales si WispHub los entrega (fórmula precisa: bytes / 1024 / 1024 / 1024)
-  const bytesDown = Number(raw.bytes_in || raw.bytes_bajada || raw.download_bytes || 0);
-  const bytesUp = Number(raw.bytes_out || raw.bytes_subida || raw.upload_bytes || 0);
-  const fallbackDownGb = bytesDown > 0 ? parseFloat((bytesDown / 1073741824).toFixed(2)) : 0;
-  const fallbackUpGb = bytesUp > 0 ? parseFloat((bytesUp / 1073741824).toFixed(2)) : 0;
+  // Extraer el mapa de tráfico real recibido de WispHub
+  const trafficPayload =
+    raw.trafico_real ||
+    raw.estadisticas ||
+    raw.historial_trafico ||
+    raw.consumo_dias ||
+    raw.trafico;
+
+  const trafficMap = extractTrafficMapFromPayload(trafficPayload);
+
+  // Bytes directos en el registro del cliente si están presentes
+  const directBytesDown = Number(raw.bytes_in ?? raw.bytes_bajada ?? raw.download_bytes ?? raw.rx_bytes ?? 0);
+  const directBytesUp = Number(raw.bytes_out ?? raw.bytes_subida ?? raw.upload_bytes ?? raw.tx_bytes ?? 0);
+  const directDownGb = directBytesDown > 0 ? convertTrafficUnitToGb(directBytesDown, "bytes") : 0;
+  const directUpGb = directBytesUp > 0 ? convertTrafficUnitToGb(directBytesUp, "bytes") : 0;
 
   const dayNames = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
   const dayShorts = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
-  // Identificar registros de tráfico real del servicio (por id_servicio o cédula)
-  const serviceKey = String(raw.id_servicio || raw.id || "").trim();
-  const cedulaKey = String(raw.cedula || "").trim();
-  const trafficRecords =
-    WISPHUB_TRAFFIC_FLOW_RECORDS[serviceKey] ||
-    WISPHUB_TRAFFIC_FLOW_RECORDS[cedulaKey] ||
-    (raw.historial_trafico && typeof raw.historial_trafico === "object" ? raw.historial_trafico : null);
-
-  // Generar los 7 días de la semana hasta el día de hoy
+  // Generar exactamente los últimos 7 días calendario hasta hoy
   const dias: DayUsage[] = [];
   for (let i = 6; i >= 0; i--) {
     const dayTime = nowDayMidnight - (i * 86400000);
     const dayDate = new Date(dayTime);
-    const dateStr = dayDate.toISOString().split("T")[0];
+    const dateStr = `${dayDate.getFullYear()}-${String(dayDate.getMonth() + 1).padStart(2, "0")}-${String(dayDate.getDate()).padStart(2, "0")}`;
+    const isoDateStr = dayDate.toISOString().split("T")[0];
     const isBefore = dayTime < installDayMidnight;
     const isInstallDay = dayTime === installDayMidnight;
     const isToday = i === 0;
@@ -703,35 +831,19 @@ export function calculateServiceUsage(raw: any): NetworkUsageData {
     let dayDown = 0;
     let dayUp = 0;
 
-    // Normalizar tráfico: valorEnGB = valorEnMiB / 1024
-    if (trafficRecords && trafficRecords[dateStr]) {
-      const rec = trafficRecords[dateStr];
-      dayDown = parseFloat((rec.downloadMib / 1024).toFixed(2));
-      dayUp = parseFloat((rec.uploadMib / 1024).toFixed(2));
-    } else if (raw.consumo_dias && raw.consumo_dias[dateStr]) {
-      const rec = raw.consumo_dias[dateStr];
-      dayDown = parseFloat(((rec.downloadMib || rec.bajada_mib || 0) / 1024).toFixed(2));
-      dayUp = parseFloat(((rec.uploadMib || rec.subida_mib || 0) / 1024).toFixed(2));
-    } else if (activo) {
-      if (diasActivo > 7) {
-        // Clientes antiguos / establecidos (como Orlinda Perez): consumo real proporcional en todos los 7 días
-        const seed = deterministicTrafficHash(`${serviceKey || cedulaKey || "client"}-${dateStr}`);
-        const dayIdx = dayDate.getDay(); // 0: Dom, 1: Lun, 2: Mar, 3: Mié, 4: Jue, 5: Vie, 6: Sáb
-        const isWeekend = dayIdx === 5 || dayIdx === 6 || dayIdx === 0;
-        const dayMult = isWeekend ? 1.45 : dayIdx === 2 ? 1.25 : 1.1;
-        const varDownMib = (seed % 450);
-        const varUpMib = ((seed >> 2) % 60);
-        const baseDownMib = Math.round(3200 * dayMult + varDownMib);
-        const baseUpMib = Math.round(320 * dayMult + varUpMib);
-        dayDown = parseFloat((baseDownMib / 1024).toFixed(2));
-        dayUp = parseFloat((baseUpMib / 1024).toFixed(2));
-      } else if (fallbackDownGb > 0 || fallbackUpGb > 0) {
-        dayDown = fallbackDownGb;
-        dayUp = fallbackUpGb;
-      }
+    // Buscar si existe registro real en el mapa para esta fecha (local o ISO)
+    const rec = trafficMap.get(dateStr) || trafficMap.get(isoDateStr);
+    if (rec) {
+      dayDown = rec.downloadGb;
+      dayUp = rec.uploadGb;
+    } else if (isToday && (directDownGb > 0 || directUpGb > 0)) {
+      // Si para hoy se dispone de telemetría de bytes directa en el servicio
+      dayDown = directDownGb;
+      dayUp = directUpGb;
     }
+    // Si la API no tiene registro o devuelve 0, se mantiene estrictamente en 0 (sin promedios inventados)
 
-    const dayTotal = parseFloat((dayDown + dayUp).toFixed(2));
+    const dayTotal = Number((dayDown + dayUp).toFixed(2));
 
     dias.push({
       fecha: dateStr,
@@ -745,15 +857,19 @@ export function calculateServiceUsage(raw: any): NetworkUsageData {
     });
   }
 
-  // Totales acumulados reales
-  const calculatedDown = parseFloat(dias.reduce((acc, d) => acc + d.downloadGb, 0).toFixed(2));
-  const calculatedUp = parseFloat(dias.reduce((acc, d) => acc + d.uploadGb, 0).toFixed(2));
-  const totalDownloadGb = calculatedDown > 0 ? calculatedDown : fallbackDownGb;
-  const totalUploadGb = calculatedUp > 0 ? calculatedUp : fallbackUpGb;
-  const totalGb = parseFloat((totalDownloadGb + totalUploadGb).toFixed(2));
+  // Sumas exactas y estrictas de los días reales procesados
+  const totalDownloadGb = Number(dias.reduce((acc, d) => acc + d.downloadGb, 0).toFixed(2));
+  const totalUploadGb = Number(dias.reduce((acc, d) => acc + d.uploadGb, 0).toFixed(2));
+  const totalGb = Number((totalDownloadGb + totalUploadGb).toFixed(2));
 
-  // Registro de consumo de hoy
-  const todayDay = dias[dias.length - 1] || dias[0];
+  // Registro del día actual (Hoy)
+  const todayDay = dias[dias.length - 1] || {
+    downloadGb: 0,
+    uploadGb: 0,
+    totalGb: 0,
+    dayName: dayNames[now.getDay()],
+  };
+
   const consumoHoy = {
     totalGb: todayDay.totalGb,
     downloadGb: todayDay.downloadGb,
@@ -769,11 +885,11 @@ export function calculateServiceUsage(raw: any): NetworkUsageData {
     fechaInstalacion: rawFechaInst || null,
     fechaInstalacionLabel,
     diasActivo,
-    esServicioNuevo: false,
+    esServicioNuevo: diasActivo <= 1 && totalGb === 0,
     mensajeEstado: undefined,
     sesionEnVivo: {
-      descarga: `${todayDay.downloadGb > 0 ? todayDay.downloadGb.toFixed(1) : (totalDownloadGb || 2.8).toFixed(1)} GB`,
-      subida: `${todayDay.uploadGb > 0 ? todayDay.uploadGb.toFixed(1) : (totalUploadGb || 0.2).toFixed(1)} GB`,
+      descarga: `${todayDay.downloadGb.toFixed(1)} GB`,
+      subida: `${todayDay.uploadGb.toFixed(1)} GB`,
     },
     dias,
   };
@@ -785,7 +901,8 @@ export function calculateServiceUsage(raw: any): NetworkUsageData {
 export function mapWisphubClientToProfile(
   raw: WisphubClientItem,
   invoices: Invoice[] = [],
-  directBalance?: number | null
+  directBalance?: number | null,
+  trafficData?: any
 ): ClientProfile {
   const idStr = String(raw.id_servicio || raw.id || "0");
   const cedulaStr = String(raw.cedula || "").trim();
@@ -977,7 +1094,10 @@ export function mapWisphubClientToProfile(
   const fechaRegistroRaw = extractSafeString(
     (raw as any).fecha_registro || (raw as any).date_joined || (raw as any).created_at || ""
   );
-  const consumoRed = calculateServiceUsage(raw);
+  const consumoRed = calculateServiceUsage({
+    ...raw,
+    trafico_real: trafficData,
+  });
 
   return {
     id: idStr,
@@ -1046,24 +1166,20 @@ export async function getWisphubServiceUsage(
   const resolvedServiceId = cleanServiceId || clientRaw?.id_servicio || clientRaw?.id || "";
   const resolvedCedula = cleanCedula || clientRaw?.cedula || "";
 
-  // Construir slug de usuario (ej. 'orlindaperez' a partir de 'orlindaperez@aponteplus')
-  const usernameRaw = String(clientRaw?.usuario || clientRaw?.nombre || "").trim();
-  const usernameSlug = usernameRaw.split("@")[0].toLowerCase().replace(/\s+/g, "-");
-
-  // Intento de consulta de tráfico en WispHub
-  let trafficHtmlOrJson: any = null;
-  if (usernameSlug && resolvedServiceId) {
+  // Consultar historial de tráfico real mediante web scraping del panel de WispHub
+  let trafficPayload: any = null;
+  if (resolvedServiceId) {
     try {
-      const trafficUrl = `https://wisphub.net/trafico/semana/servicio/${usernameSlug}/${resolvedServiceId}/`;
-      const tRes = await fetch(trafficUrl, {
-        headers: getWisphubHeaders(),
-        redirect: "manual",
-      });
-      if (tRes.ok) {
-        trafficHtmlOrJson = await tRes.text();
+      const scraped = await scrapeTrafficWeek(resolvedServiceId);
+      if (scraped.success && scraped.dias.length > 0) {
+        trafficPayload = scraped.dias.map((d) => ({
+          fecha: d.fecha,
+          download_mib: d.downloadGb * 1024,
+          upload_mib: d.uploadGb * 1024,
+        }));
       }
-    } catch (tErr: any) {
-      console.warn(`[WispHub] No se pudo obtener tráfico directo para ${usernameSlug}/${resolvedServiceId}:`, tErr.message);
+    } catch (err: any) {
+      console.warn(`[WispHub] Error en scraping de tráfico para servicio ${resolvedServiceId}:`, err.message);
     }
   }
 
@@ -1071,7 +1187,7 @@ export async function getWisphubServiceUsage(
     ...(clientRaw || {}),
     id_servicio: resolvedServiceId,
     cedula: resolvedCedula,
-    trafico_remoto: trafficHtmlOrJson,
+    trafico_real: trafficPayload,
   };
 
   return calculateServiceUsage(rawObj);
@@ -1135,8 +1251,25 @@ export async function getClientByDocument(documento: string): Promise<{
       invoices = await getWisphubInvoices(serviceId, basicClient.id, cleanDoc, fullClient.usuario);
     }
 
+    // 4.5. Consultar historial de tráfico real mediante web scraping del panel de WispHub
+    let trafficData: any = null;
+    if (serviceId) {
+      try {
+        const scraped = await scrapeTrafficWeek(serviceId);
+        if (scraped.success && scraped.dias.length > 0) {
+          trafficData = scraped.dias.map((d) => ({
+            fecha: d.fecha,
+            download_mib: d.downloadGb * 1024,
+            upload_mib: d.uploadGb * 1024,
+          }));
+        }
+      } catch (err: any) {
+        console.warn(`[WispHub] Error en scraping de tráfico para servicio ${serviceId}:`, err.message);
+      }
+    }
+
     // 5. Mapear a ClientProfile estandarizado
-    const profile = mapWisphubClientToProfile(fullClient, invoices, directBalance);
+    const profile = mapWisphubClientToProfile(fullClient, invoices, directBalance, trafficData);
 
     return {
       success: true,

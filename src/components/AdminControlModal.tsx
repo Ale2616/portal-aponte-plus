@@ -17,6 +17,7 @@ import {
   Building2,
   ExternalLink,
   MessageCircle,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -102,20 +103,67 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
     reader.readAsDataURL(file);
   };
 
-  const handleSaveBanner = () => {
-    updateHomeAdBanner({
-      enabled: bannerEnabled,
-      imageUrl: bannerImageUrl.trim() || "/banner-promo-fibra.jpg",
-      titulo: bannerTitulo.trim() || "¡Pásate a Fibra Óptica con Alta Velocidad!",
-      descripcion:
-        bannerDescripcion.trim() ||
-        "Disfruta de la mejor conexión de la región con 100% fibra óptica dedicada.",
-      botonTexto: bannerBotonTexto.trim() || "📲 Preguntar por WhatsApp",
-      whatsappMensaje:
-        bannerWhatsappMensaje.trim() ||
-        "Hola, vi la promoción en el portal y deseo más información sobre el servicio de internet",
-    });
-    toast.success("Banner publicitario de inicio actualizado.");
+  const [isSavingBanner, setIsSavingBanner] = useState(false);
+
+  const handleSaveBanner = async () => {
+    setIsSavingBanner(true);
+    const cleanPhone = (supportPhone || "3185577157").replace(/\D/g, "");
+    const phoneWithCountry = cleanPhone.startsWith("57") ? cleanPhone : `57${cleanPhone}`;
+    const defaultMsg = "Hola, vi la promoción en el portal y deseo más información sobre el servicio de internet";
+    const waMsg = bannerWhatsappMensaje.trim() || defaultMsg;
+    const linkWhatsapp = `https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(waMsg)}`;
+
+    try {
+      const res = await fetch("/api/promociones", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          pin: "1130",
+          imagenUrl: bannerImageUrl.trim() || "/banner-promo-fibra.jpg",
+          titulo: bannerTitulo.trim() || "¡Pásate a Fibra Óptica con Alta Velocidad!",
+          descripcion:
+            bannerDescripcion.trim() ||
+            "Disfruta de la mejor conexión de la región con 100% fibra óptica dedicada.",
+          botonTexto: bannerBotonTexto.trim() || "📲 Preguntar por WhatsApp",
+          linkWhatsapp,
+          whatsappMensaje: waMsg,
+          activa: bannerEnabled,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Error al persistir la promoción en el servidor");
+      }
+
+      const finalImg = data.promocion?.imagenUrl || data.imagenUrl || bannerImageUrl.trim();
+      setBannerImageUrl(finalImg);
+
+      updateHomeAdBanner({
+        enabled: bannerEnabled,
+        imageUrl: finalImg,
+        titulo: bannerTitulo.trim() || "¡Pásate a Fibra Óptica con Alta Velocidad!",
+        descripcion:
+          bannerDescripcion.trim() ||
+          "Disfruta de la mejor conexión de la región con 100% fibra óptica dedicada.",
+        botonTexto: bannerBotonTexto.trim() || "📲 Preguntar por WhatsApp",
+        whatsappMensaje: waMsg,
+        linkWhatsapp,
+      });
+
+      toast.success("¡Promoción publicada globalmente!", {
+        description: "Guardada en el servidor central: todos los clientes y visitantes la verán al instante.",
+      });
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Error al guardar en el servidor", {
+        description: err.message || "No se pudo sincronizar la promoción.",
+      });
+    } finally {
+      setIsSavingBanner(false);
+    }
   };
 
   // Estado para formulario de nueva promoción
@@ -629,11 +677,21 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
               <div className="pt-3 border-t border-slate-800 flex justify-end">
                 <button
                   type="button"
+                  disabled={isSavingBanner}
                   onClick={handleSaveBanner}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md transition-all cursor-pointer"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 shadow-md transition-all cursor-pointer"
                 >
-                  <Check className="w-4 h-4" />
-                  <span>Guardar Cambios del Banner</span>
+                  {isSavingBanner ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Guardando en Servidor...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>Guardar Cambios del Banner</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>

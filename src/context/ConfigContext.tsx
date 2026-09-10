@@ -37,6 +37,8 @@ export interface HomeAdBanner {
   descripcion: string;
   botonTexto: string;
   whatsappMensaje: string;
+  linkWhatsapp?: string;
+  actualizadoEn?: string;
 }
 
 export interface PortalConfig {
@@ -94,6 +96,7 @@ const DEFAULT_CONFIG: PortalConfig = {
     descripcion: "Disfruta de la mejor conexión de la región con 100% fibra óptica dedicada y ultra velocidad.",
     botonTexto: "📲 Preguntar por WhatsApp",
     whatsappMensaje: "Hola, vi la promoción en el portal y deseo más información sobre el servicio de internet",
+    linkWhatsapp: "https://wa.me/573185577157?text=Hola%2C%20vi%20la%20promoci%C3%B3n%20en%20el%20portal%20y%20deseo%20m%C3%A1s%20informaci%C3%B3n%20sobre%20el%20servicio%20de%20internet",
   },
 };
 
@@ -110,6 +113,7 @@ interface ConfigContextType {
   updateHomeAdBanner: (banner: Partial<HomeAdBanner>) => void;
   saveAllConfig: (newConfig: PortalConfig) => void;
   resetToDefaults: () => void;
+  refreshPromotions: () => Promise<void>;
 }
 
 const ConfigContext = createContext<ConfigContextType | undefined>(undefined);
@@ -123,7 +127,6 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        // Mezclar con defaults para asegurar que no falten propiedades nuevas
         setConfig({
           companyInfo: { ...DEFAULT_CONFIG.companyInfo, ...(parsed.companyInfo || {}) },
           promotions: Array.isArray(parsed.promotions) && parsed.promotions.length > 0
@@ -138,6 +141,37 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsInitialized(true);
     }
+
+    // Sincronizar inmediatamente con la Promoción Global del Backend
+    const fetchGlobalPromo = async () => {
+      try {
+        const res = await fetch("/api/promociones", { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.promocion) {
+            const p = data.promocion;
+            setConfig((prev) => ({
+              ...prev,
+              homeAdBanner: {
+                ...prev.homeAdBanner,
+                enabled: typeof p.activa === "boolean" ? p.activa : prev.homeAdBanner.enabled,
+                imageUrl: p.imagenUrl || prev.homeAdBanner.imageUrl,
+                titulo: p.titulo || prev.homeAdBanner.titulo,
+                descripcion: p.descripcion || prev.homeAdBanner.descripcion,
+                botonTexto: p.botonTexto || prev.homeAdBanner.botonTexto,
+                whatsappMensaje: p.whatsappMensaje || prev.homeAdBanner.whatsappMensaje,
+                linkWhatsapp: p.linkWhatsapp || "",
+                actualizadoEn: p.actualizadoEn || "",
+              },
+            }));
+          }
+        }
+      } catch (err) {
+        console.warn("[ConfigContext] Error cargando promoción global:", err);
+      }
+    };
+
+    fetchGlobalPromo();
   }, []);
 
   const persist = (updated: PortalConfig) => {
@@ -226,6 +260,34 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
     persist(DEFAULT_CONFIG);
   };
 
+  const refreshPromotions = async () => {
+    try {
+      const res = await fetch("/api/promociones", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.promocion) {
+          const p = data.promocion;
+          setConfig((prev) => ({
+            ...prev,
+            homeAdBanner: {
+              ...prev.homeAdBanner,
+              enabled: typeof p.activa === "boolean" ? p.activa : prev.homeAdBanner.enabled,
+              imageUrl: p.imagenUrl || prev.homeAdBanner.imageUrl,
+              titulo: p.titulo || prev.homeAdBanner.titulo,
+              descripcion: p.descripcion || prev.homeAdBanner.descripcion,
+              botonTexto: p.botonTexto || prev.homeAdBanner.botonTexto,
+              whatsappMensaje: p.whatsappMensaje || prev.homeAdBanner.whatsappMensaje,
+              linkWhatsapp: p.linkWhatsapp || "",
+              actualizadoEn: p.actualizadoEn || "",
+            },
+          }));
+        }
+      }
+    } catch (err) {
+      console.warn("[ConfigContext] Error refrescando promociones:", err);
+    }
+  };
+
   return (
     <ConfigContext.Provider
       value={{
@@ -239,6 +301,7 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
         updateHomeAdBanner,
         saveAllConfig,
         resetToDefaults,
+        refreshPromotions,
       }}
     >
       {children}

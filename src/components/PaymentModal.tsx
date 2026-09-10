@@ -28,8 +28,8 @@ const FormSchema = z.object({
   metodo_pago: z.string().min(1, "Debes seleccionar el canal de pago"),
   referencia: z
     .string()
-    .min(3, "Ingresa el número de referencia o comprobante (mínimo 3 dígitos)")
-    .max(50, "La referencia no puede superar los 50 caracteres"),
+    .max(50, "La referencia no puede superar los 50 caracteres")
+    .optional(),
   monto: z.number().positive("El monto debe ser un valor positivo mayor a cero"),
   fecha_pago: z.string().min(1, "Ingresa la fecha y hora de la transferencia"),
   observaciones: z.string().max(300).optional(),
@@ -44,6 +44,64 @@ interface PaymentModalProps {
   pendingInvoices: Invoice[];
   initialInvoiceId?: string;
   onSuccessReport: (result: PaymentReportResult) => void;
+}
+
+async function compressImage(file: File, maxWidth = 1600, quality = 0.75): Promise<File> {
+  // Si el archivo no es imagen (ej. PDF) o si ya pesa menos de 800KB, no es necesario comprimir agresivamente
+  if (!file.type.startsWith("image/") || file.size <= 800 * 1024) {
+    return file;
+  }
+
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onerror = () => resolve(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onerror = () => resolve(file);
+      img.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          let width = img.width;
+          let height = img.height;
+
+          // Redimensionar proporcionalmente si supera maxWidth
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx?.drawImage(img, 0, 0, width, height);
+
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) {
+                resolve(file);
+                return;
+              }
+              const compressedFile = new File(
+                [blob],
+                file.name.replace(/\.[^/.]+$/, ".jpg"),
+                {
+                  type: "image/jpeg",
+                  lastModified: Date.now(),
+                }
+              );
+              resolve(compressedFile);
+            },
+            "image/jpeg",
+            quality
+          );
+        } catch {
+          resolve(file);
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 export function PaymentModal({
@@ -139,9 +197,12 @@ export function PaymentModal({
     setIsSubmitting(true);
 
     try {
+      // 1. Compresión automática de imágenes en el cliente antes de armar el FormData
+      const fileAEnviar = await compressImage(selectedFile);
+
       const formData = new FormData();
-      formData.append("archivo", selectedFile);
-      formData.append("comprobante", selectedFile);
+      formData.append("archivo", fileAEnviar);
+      formData.append("comprobante", fileAEnviar);
       formData.append("nombre", client.nombreCompleto);
       formData.append("nombre_cliente", client.nombreCompleto);
       formData.append("cedula", client.cedula);
@@ -150,7 +211,7 @@ export function PaymentModal({
       formData.append("plan_cliente", client.plan.nombre);
       formData.append("monto", data.monto.toString());
       formData.append("metodo_pago", currentMethod?.name || data.metodo_pago);
-      formData.append("referencia", data.referencia);
+      formData.append("referencia", (data.referencia || "").trim());
       formData.append("fecha_pago", data.fecha_pago);
       formData.append("id_factura", data.id_factura);
       formData.append("id_cliente", client.id);
@@ -164,14 +225,27 @@ export function PaymentModal({
         formData.append("observaciones", data.observaciones);
       }
 
-      const res = await fetch("/api/facturas/reportar-pago", {
+      // 2. Manejo seguro de la llamada HTTP y prevención de error de parseo JSON
+      const response = await fetch("/api/facturas/reportar-pago", {
         method: "POST",
         body: formData,
       });
 
-      const json = await res.json();
+      if (!response.ok) {
+        if (response.status === 413) {
+          throw new Error(
+            "El comprobante es demasiado pesado. Por favor intenta con una captura de pantalla más liviana."
+          );
+        }
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.error || errorData.message || `Error del servidor (${response.status})`
+        );
+      }
 
-      if (!res.ok || !json.success) {
+      const json = await response.json();
+
+      if (!json.success) {
         throw new Error(json.error || "No se pudo procesar el reporte");
       }
 
@@ -421,11 +495,11 @@ export function PaymentModal({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">
-                    Número de Comprobante / Referencia <span className="text-rose-500">*</span>
+                    NÚMERO DE COMPROBANTE / REFERENCIA (Opcional)
                   </label>
                   <input
                     type="text"
-                    placeholder="Ej. M18492048"
+                    placeholder="Ej. M18492048 (Opcional)"
                     {...register("referencia")}
                     className="w-full px-3.5 py-2.5 rounded-xl text-sm font-medium bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400"
                   />

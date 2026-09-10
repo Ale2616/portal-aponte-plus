@@ -15,7 +15,8 @@ export async function POST(req: NextRequest) {
     const montoRaw = (formData.get("monto") || "0").toString().trim();
     const montoNum = parseFloat(montoRaw.replace(/[^0-9.]/g, "")) || 0;
     const metodo_pago = (formData.get("metodo_pago") || "Transferencia Bancaria").toString().trim();
-    const referencia = (formData.get("referencia") || "").toString().trim();
+    const referenciaRaw = (formData.get("referencia") || "").toString().trim();
+    const referencia = referenciaRaw || "Ver imagen adjunta";
 
     // Campos complementarios para registro interno y WispHub
     const idFactura = (formData.get("id_factura") || `FAC-${Date.now()}`).toString().trim();
@@ -30,13 +31,6 @@ export async function POST(req: NextRequest) {
           success: false,
           error: "Es obligatorio adjuntar el comprobante real de pago (foto o captura de pantalla).",
         },
-        { status: 400 }
-      );
-    }
-
-    if (!referencia || referencia.length < 3) {
-      return NextResponse.json(
-        { success: false, error: "El número de referencia o comprobante debe tener al menos 3 caracteres." },
         { status: 400 }
       );
     }
@@ -105,7 +99,7 @@ export async function POST(req: NextRequest) {
 📦 <b>Plan:</b> ${plan}
 💰 <b>Monto:</b> $${montoFormateado} COP
 🏦 <b>Medio:</b> ${metodo_pago}
-🔖 <b>Referencia:</b> ${referencia}
+🔖 <b>Referencia:</b> ${referencia || "Ver imagen adjunta"}
 📅 <b>Fecha:</b> ${fechaActual}
 ━━━━━━━━━━━━━━━━━━━━
 <i>Verificar comprobante adjunto y aplicar en WispHub.</i>`;
@@ -137,12 +131,28 @@ export async function POST(req: NextRequest) {
     telegramFormData.append("parse_mode", "HTML");
     telegramFormData.append("caption", telegramCaption);
 
-    const telegramRes = await fetch(telegramEndpoint, {
+    let telegramRes = await fetch(telegramEndpoint, {
       method: "POST",
       body: telegramFormData,
     });
 
-    const telegramJson = await telegramRes.json().catch(() => ({ ok: false }));
+    let telegramJson = await telegramRes.json().catch(() => ({ ok: false }));
+
+    // Si falló sendPhoto (por ejemplo, si Telegram rechaza procesar el formato de la foto), reintentar automáticamente como sendDocument
+    if ((!telegramRes.ok || !telegramJson.ok) && !isPdf) {
+      console.warn("[Telegram sendPhoto falló, ejecutando reintento con sendDocument]:", telegramJson);
+      const fallbackFormData = new FormData();
+      fallbackFormData.append("chat_id", telegramChatId);
+      fallbackFormData.append("document", file, file.name || "comprobante.jpg");
+      fallbackFormData.append("parse_mode", "HTML");
+      fallbackFormData.append("caption", telegramCaption);
+
+      telegramRes = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendDocument`, {
+        method: "POST",
+        body: fallbackFormData,
+      });
+      telegramJson = await telegramRes.json().catch(() => ({ ok: false }));
+    }
 
     if (!telegramRes.ok || !telegramJson.ok) {
       console.error("[Telegram API Error]:", telegramJson);

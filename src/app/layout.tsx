@@ -50,7 +50,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" suppressHydrationWarning>
+    <html lang="es" suppressHydrationWarning className="overflow-x-hidden w-full max-w-full">
       <head>
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#0f172a" />
@@ -60,14 +60,17 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased min-h-screen flex flex-col`}
+        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased min-h-screen flex flex-col overflow-x-hidden w-full max-w-full`}
       >
         <ConfigProvider>
           <Toaster
-            position="top-right"
+            position="bottom-center"
+            duration={3000}
             richColors
             closeButton
             toastOptions={{
+              duration: 3000,
+              className: "pointer-events-auto",
               style: {
                 borderRadius: "1rem",
                 fontSize: "0.875rem",

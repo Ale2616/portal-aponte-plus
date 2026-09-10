@@ -39,6 +39,10 @@ export function SearchScreen({ onSearch, isLoading, error }: SearchScreenProps) 
       : `📲 ${banner.botonTexto}`
     : "📲 Preguntar por WhatsApp";
 
+  const targetWhatsappUrl = banner?.linkWhatsapp && banner.linkWhatsapp.startsWith("http")
+    ? banner.linkWhatsapp
+    : `https://wa.me/${phoneWithCountry || "573185577157"}?text=${encodeURIComponent(promoWhatsappMsg)}`;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!documento.trim()) return;
@@ -158,7 +162,7 @@ export function SearchScreen({ onSearch, isLoading, error }: SearchScreenProps) 
                 )}
 
                 <a
-                  href={`https://wa.me/${phoneWithCountry || "573185577157"}?text=${encodeURIComponent(promoWhatsappMsg)}`}
+                  href={targetWhatsappUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="w-full py-3 px-4 rounded-xl font-bold text-xs sm:text-sm bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.01] active:scale-[0.99]"

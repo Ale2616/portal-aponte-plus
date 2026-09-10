@@ -139,7 +139,10 @@ function PortalContent() {
       window.history.replaceState({}, "", "/");
     }
     router.replace("/");
-    toast.info("Has cerrado tu consulta de abonado.");
+    toast.info("Has cerrado tu consulta de abonado.", {
+      duration: 3000,
+      description: "Puedes ingresar nuevamente con tu número de documento.",
+    });
   }, [router]);
 
   // Abrir modal de reporte de pago
