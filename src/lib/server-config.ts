@@ -25,7 +25,6 @@ export { DEFAULT_CONFIG };
 // ─── Memoria RAM Global ─────────────────────────────────────────────────────────
 
 declare global {
-  // eslint-disable-next-line no-var
   var __GLOBAL_PORTAL_CONFIG__: PortalConfig | undefined;
 }
 
