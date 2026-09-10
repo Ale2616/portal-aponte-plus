@@ -13,7 +13,12 @@ export async function POST(req: NextRequest) {
     const cedula = (formData.get("cedula") || formData.get("cedula_cliente") || formData.get("id_cliente") || "").toString().trim();
     const plan = (formData.get("plan") || formData.get("plan_cliente") || "Plan Fibra Óptica").toString().trim();
     const montoRaw = (formData.get("monto") || "0").toString().trim();
-    const montoNum = parseFloat(montoRaw.replace(/[^0-9.]/g, "")) || 0;
+    // Normalizar monto: Si viene con formato de miles con puntos (ej: "50.000"), eliminar puntos para no confundir con decimales
+    let montoLimpio = montoRaw;
+    if (/^\d{1,3}(\.\d{3})+$/.test(montoRaw)) {
+      montoLimpio = montoRaw.replace(/\./g, "");
+    }
+    const montoNum = parseFloat(montoLimpio.replace(/[^0-9.]/g, "")) || 0;
     const metodo_pago = (formData.get("metodo_pago") || "Transferencia Bancaria").toString().trim();
     const referenciaRaw = (formData.get("referencia") || "").toString().trim();
     const referencia = referenciaRaw || "Ver imagen adjunta";

@@ -1,297 +1,197 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { toast } from "sonner";
+import {
+  PortalConfig,
+  CompanyInfo,
+  PromotionItem,
+  GlobalAlert,
+  HomeAdBanner,
+  DEFAULT_CONFIG,
+} from "@/types/config";
 
-export interface PromotionItem {
-  id: string;
-  tag: string;
-  titulo: string;
-  descripcion: string;
-  botonTexto: string;
-  whatsappMensaje: string;
-  gradiente: string;
-  icono: string;
-  imagenUrl?: string;
-  activo: boolean;
-}
-
-export interface CompanyInfo {
-  companyName: string;
-  legalName: string;
-  supportPhone: string;
-  supportPhoneFormatted: string;
-  nequiNumber: string;
-  accountHolder: string;
-}
-
-export interface GlobalAlert {
-  enabled: boolean;
-  message: string;
-  type: "warning" | "info";
-}
-
-export interface HomeAdBanner {
-  enabled: boolean;
-  imageUrl: string;
-  titulo: string;
-  descripcion: string;
-  botonTexto: string;
-  whatsappMensaje: string;
-  linkWhatsapp?: string;
-  actualizadoEn?: string;
-}
-
-export interface PortalConfig {
-  companyInfo: CompanyInfo;
-  promotions: PromotionItem[];
-  globalAlert: GlobalAlert;
-  homeAdBanner: HomeAdBanner;
-}
-
-const DEFAULT_CONFIG: PortalConfig = {
-  companyInfo: {
-    companyName: "Internet Aponte Plus",
-    legalName: "Internet Aponte Plus S.A.S.",
-    supportPhone: "3185577157",
-    supportPhoneFormatted: "318 557 7157",
-    nequiNumber: "311 276 0959",
-    accountHolder: "Orlando Aponte / Aponte Plus",
-  },
-  // Promociones específicas (se eliminaron promociones genéricas de fidelidad)
-  promotions: [
-    {
-      id: "promo-100m",
-      tag: "🔥 Plan Recomendado",
-      titulo: "Pásate a 100 Megas simétricas por solo $10.000 más",
-      descripcion: "Disfruta de máxima velocidad para streaming en 4K, teletrabajo y juegos en línea sin lag con fibra óptica dedicada.",
-      botonTexto: "Pedir Upgrade",
-      whatsappMensaje: "Hola, soy cliente de Internet Aponte Plus y me interesa la promoción para pasarme a 100 Megas simétricas por $10.000 más.",
-      gradiente: "from-blue-600 via-indigo-600 to-violet-700",
-      icono: "Zap",
-      imagenUrl: "",
-      activo: true,
-    },
-    {
-      id: "promo-referidos",
-      tag: "🎁 Plan Amigos",
-      titulo: "Recomienda a un vecino y recibe 50% de descuento en tu próxima factura",
-      descripcion: "Comparte la mejor conexión de la región. Cuando tu referido instale el servicio, ambos reciben un beneficio especial en su mensualidad.",
-      botonTexto: "Referir un Vecino",
-      whatsappMensaje: "Hola, quiero referir a un vecino en Internet Aponte Plus para aprovechar la promoción del 50% de descuento.",
-      gradiente: "from-emerald-600 via-teal-600 to-cyan-700",
-      icono: "Users",
-      imagenUrl: "",
-      activo: true,
-    },
-  ],
-  globalAlert: {
-    enabled: false,
-    message: "Aviso de servicio: Mantenimiento preventivo en red de fibra óptica este jueves de 2:00 AM a 4:00 AM.",
-    type: "warning",
-  },
-  homeAdBanner: {
-    enabled: true,
-    imageUrl: "/banner-promo-fibra.jpg",
-    titulo: "¡Pásate a Fibra Óptica con Alta Velocidad!",
-    descripcion: "Disfruta de la mejor conexión de la región con 100% fibra óptica dedicada y ultra velocidad.",
-    botonTexto: "📲 Preguntar por WhatsApp",
-    whatsappMensaje: "Hola, vi la promoción en el portal y deseo más información sobre el servicio de internet",
-    linkWhatsapp: "https://wa.me/573185577157?text=Hola%2C%20vi%20la%20promoci%C3%B3n%20en%20el%20portal%20y%20deseo%20m%C3%A1s%20informaci%C3%B3n%20sobre%20el%20servicio%20de%20internet",
-  },
-};
-
-const STORAGE_KEY = "aponte_plus_portal_config";
+export type { PortalConfig, CompanyInfo, PromotionItem, GlobalAlert, HomeAdBanner };
 
 interface ConfigContextType {
   config: PortalConfig;
-  updateCompanyInfo: (info: Partial<CompanyInfo>) => void;
-  addPromotion: (promo: Omit<PromotionItem, "id">) => void;
-  updatePromotion: (id: string, promo: Partial<PromotionItem>) => void;
-  deletePromotion: (id: string) => void;
-  togglePromotion: (id: string) => void;
-  updateGlobalAlert: (alert: Partial<GlobalAlert>) => void;
-  updateHomeAdBanner: (banner: Partial<HomeAdBanner>) => void;
-  saveAllConfig: (newConfig: PortalConfig) => void;
-  resetToDefaults: () => void;
-  refreshPromotions: () => Promise<void>;
+  isLoading: boolean;
+  updateCompanyInfo: (info: Partial<CompanyInfo>) => Promise<void>;
+  addPromotion: (promo: Omit<PromotionItem, "id">) => Promise<void>;
+  updatePromotion: (id: string, promo: Partial<PromotionItem>) => Promise<void>;
+  deletePromotion: (id: string) => Promise<void>;
+  togglePromotion: (id: string) => Promise<void>;
+  updateGlobalAlert: (alert: Partial<GlobalAlert>) => Promise<void>;
+  updateHomeAdBanner: (banner: Partial<HomeAdBanner>) => Promise<void>;
+  saveAllConfig: (newConfig: PortalConfig) => Promise<void>;
+  resetToDefaults: () => Promise<void>;
+  refreshConfig: () => Promise<void>;
 }
 
 const ConfigContext = createContext<ConfigContextType | undefined>(undefined);
 
 export function ConfigProvider({ children }: { children: React.ReactNode }) {
   const [config, setConfig] = useState<PortalConfig>(DEFAULT_CONFIG);
-  const [isInitialized, setIsInitialized] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
+  // ─── Carga de Configuración Global desde el Servidor (SIN localStorage) ───────
+  const fetchServerConfig = useCallback(async () => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setConfig({
-          companyInfo: { ...DEFAULT_CONFIG.companyInfo, ...(parsed.companyInfo || {}) },
-          promotions: Array.isArray(parsed.promotions) && parsed.promotions.length > 0
-            ? parsed.promotions
-            : DEFAULT_CONFIG.promotions,
-          globalAlert: { ...DEFAULT_CONFIG.globalAlert, ...(parsed.globalAlert || {}) },
-          homeAdBanner: { ...DEFAULT_CONFIG.homeAdBanner, ...(parsed.homeAdBanner || {}) },
-        });
+      const res = await fetch("/api/configuracion", {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.config) {
+          setConfig(data.config);
+        }
       }
     } catch (err) {
-      console.warn("[ConfigContext] Error al leer configuración local:", err);
+      console.warn("[ConfigContext] Error al cargar configuración global del servidor:", err);
     } finally {
-      setIsInitialized(true);
+      setIsLoading(false);
     }
-
-    // Sincronizar inmediatamente con la Promoción Global del Backend
-    const fetchGlobalPromo = async () => {
-      try {
-        const res = await fetch("/api/promociones", { cache: "no-store" });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && data.promocion) {
-            const p = data.promocion;
-            setConfig((prev) => ({
-              ...prev,
-              homeAdBanner: {
-                ...prev.homeAdBanner,
-                enabled: typeof p.activa === "boolean" ? p.activa : prev.homeAdBanner.enabled,
-                imageUrl: p.imagenUrl || prev.homeAdBanner.imageUrl,
-                titulo: p.titulo || prev.homeAdBanner.titulo,
-                descripcion: p.descripcion || prev.homeAdBanner.descripcion,
-                botonTexto: p.botonTexto || prev.homeAdBanner.botonTexto,
-                whatsappMensaje: p.whatsappMensaje || prev.homeAdBanner.whatsappMensaje,
-                linkWhatsapp: p.linkWhatsapp || "",
-                actualizadoEn: p.actualizadoEn || "",
-              },
-            }));
-          }
-        }
-      } catch (err) {
-        console.warn("[ConfigContext] Error cargando promoción global:", err);
-      }
-    };
-
-    fetchGlobalPromo();
   }, []);
 
-  const persist = (updated: PortalConfig) => {
-    setConfig(updated);
+  // Inicializar al montar
+  useEffect(() => {
+    fetchServerConfig();
+
+    // Revalidación periódica cada 20 segundos para reflejar cambios en tiempo real a todos los clientes
+    const interval = setInterval(fetchServerConfig, 20000);
+
+    // Revalidar cuando la pestaña vuelve a enfocarse
+    const onFocus = () => fetchServerConfig();
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [fetchServerConfig]);
+
+  // ─── Persistencia Global en Servidor ──────────────────────────────────────────
+  const persistToServer = async (updated: PortalConfig): Promise<boolean> => {
+    setConfig(updated); // Actualización optimista
+
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    } catch (err) {
-      console.warn("[ConfigContext] Error al guardar configuración local:", err);
+      const res = await fetch("/api/configuracion", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          pin: "1130",
+          config: updated,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "No se pudo guardar la configuración en el servidor");
+      }
+
+      if (data.config) {
+        setConfig(data.config);
+      }
+      return true;
+    } catch (err: any) {
+      console.error("[ConfigContext] Error al guardar en servidor:", err);
+      toast.error("Error al sincronizar con el servidor", {
+        description: err.message,
+      });
+      // Revertir recargando la configuración del servidor
+      void fetchServerConfig();
+      return false;
     }
   };
 
-  const updateCompanyInfo = (info: Partial<CompanyInfo>) => {
-    const updated = {
+  const updateCompanyInfo = async (info: Partial<CompanyInfo>) => {
+    const updated: PortalConfig = {
       ...config,
       companyInfo: {
         ...config.companyInfo,
         ...info,
       },
     };
-    persist(updated);
+    await persistToServer(updated);
   };
 
-  const addPromotion = (promo: Omit<PromotionItem, "id">) => {
+  const addPromotion = async (promo: Omit<PromotionItem, "id">) => {
     const newPromo: PromotionItem = {
       ...promo,
       id: `promo_${Date.now()}`,
     };
-    const updated = {
+    const updated: PortalConfig = {
       ...config,
       promotions: [newPromo, ...config.promotions],
     };
-    persist(updated);
+    await persistToServer(updated);
   };
 
-  const updatePromotion = (id: string, promo: Partial<PromotionItem>) => {
-    const updated = {
+  const updatePromotion = async (id: string, promo: Partial<PromotionItem>) => {
+    const updated: PortalConfig = {
       ...config,
       promotions: config.promotions.map((p) => (p.id === id ? { ...p, ...promo } : p)),
     };
-    persist(updated);
+    await persistToServer(updated);
   };
 
-  const deletePromotion = (id: string) => {
-    const updated = {
+  const deletePromotion = async (id: string) => {
+    const updated: PortalConfig = {
       ...config,
       promotions: config.promotions.filter((p) => p.id !== id),
     };
-    persist(updated);
+    await persistToServer(updated);
   };
 
-  const togglePromotion = (id: string) => {
-    const updated = {
+  const togglePromotion = async (id: string) => {
+    const updated: PortalConfig = {
       ...config,
-      promotions: config.promotions.map((p) => (p.id === id ? { ...p, activo: !p.activo } : p)),
+      promotions: config.promotions.map((p) =>
+        p.id === id ? { ...p, activo: !p.activo } : p
+      ),
     };
-    persist(updated);
+    await persistToServer(updated);
   };
 
-  const updateGlobalAlert = (alert: Partial<GlobalAlert>) => {
-    const updated = {
+  const updateGlobalAlert = async (alert: Partial<GlobalAlert>) => {
+    const updated: PortalConfig = {
       ...config,
       globalAlert: {
         ...config.globalAlert,
         ...alert,
       },
     };
-    persist(updated);
+    await persistToServer(updated);
   };
 
-  const updateHomeAdBanner = (banner: Partial<HomeAdBanner>) => {
-    const updated = {
+  const updateHomeAdBanner = async (banner: Partial<HomeAdBanner>) => {
+    const updated: PortalConfig = {
       ...config,
       homeAdBanner: {
         ...config.homeAdBanner,
         ...banner,
       },
     };
-    persist(updated);
+    await persistToServer(updated);
   };
 
-  const saveAllConfig = (newConfig: PortalConfig) => {
-    persist(newConfig);
+  const saveAllConfig = async (newConfig: PortalConfig) => {
+    await persistToServer(newConfig);
   };
 
-  const resetToDefaults = () => {
-    persist(DEFAULT_CONFIG);
-  };
-
-  const refreshPromotions = async () => {
-    try {
-      const res = await fetch("/api/promociones", { cache: "no-store" });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.promocion) {
-          const p = data.promocion;
-          setConfig((prev) => ({
-            ...prev,
-            homeAdBanner: {
-              ...prev.homeAdBanner,
-              enabled: typeof p.activa === "boolean" ? p.activa : prev.homeAdBanner.enabled,
-              imageUrl: p.imagenUrl || prev.homeAdBanner.imageUrl,
-              titulo: p.titulo || prev.homeAdBanner.titulo,
-              descripcion: p.descripcion || prev.homeAdBanner.descripcion,
-              botonTexto: p.botonTexto || prev.homeAdBanner.botonTexto,
-              whatsappMensaje: p.whatsappMensaje || prev.homeAdBanner.whatsappMensaje,
-              linkWhatsapp: p.linkWhatsapp || "",
-              actualizadoEn: p.actualizadoEn || "",
-            },
-          }));
-        }
-      }
-    } catch (err) {
-      console.warn("[ConfigContext] Error refrescando promociones:", err);
-    }
+  const resetToDefaults = async () => {
+    await persistToServer(DEFAULT_CONFIG);
   };
 
   return (
     <ConfigContext.Provider
       value={{
         config,
+        isLoading,
         updateCompanyInfo,
         addPromotion,
         updatePromotion,
@@ -301,7 +201,7 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
         updateHomeAdBanner,
         saveAllConfig,
         resetToDefaults,
-        refreshPromotions,
+        refreshConfig: fetchServerConfig,
       }}
     >
       {children}
@@ -309,7 +209,7 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function useConfig() {
+export function useConfig(): ConfigContextType {
   const context = useContext(ConfigContext);
   if (!context) {
     throw new Error("useConfig debe usarse dentro de un ConfigProvider");

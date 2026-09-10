@@ -104,6 +104,19 @@ async function compressImage(file: File, maxWidth = 1600, quality = 0.75): Promi
   });
 }
 
+function formatThousands(value: string | number | undefined | null): string {
+  if (value === undefined || value === null || value === "") return "";
+  const clean = String(value).replace(/\D/g, "");
+  if (!clean) return "";
+  return clean.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+function parseCleanInteger(formatted: string | number | undefined | null): number {
+  if (formatted === undefined || formatted === null || formatted === "") return 0;
+  const clean = String(formatted).replace(/\D/g, "");
+  return clean ? parseInt(clean, 10) : 0;
+}
+
 export function PaymentModal({
   isOpen,
   onClose,
@@ -120,6 +133,10 @@ export function PaymentModal({
 
   const activeInvoice =
     pendingInvoices.find((i) => i.id === initialInvoiceId) || pendingInvoices[0] || null;
+
+  const [montoDisplay, setMontoDisplay] = useState<string>(() =>
+    formatThousands(activeInvoice?.saldoPendiente || 0)
+  );
 
   const getDefaultDateTime = () => {
     const now = new Date();
@@ -158,11 +175,32 @@ export function PaymentModal({
     branding.paymentMethods[0];
 
   useEffect(() => {
+    register("monto");
+  }, [register]);
+
+  useEffect(() => {
     if (activeInvoice) {
       setValue("id_factura", activeInvoice.id);
       setValue("monto", activeInvoice.saldoPendiente);
+      setMontoDisplay(formatThousands(activeInvoice.saldoPendiente));
     }
   }, [activeInvoice, setValue]);
+
+  const handleMontoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawInput = e.target.value;
+    const digitsOnly = rawInput.replace(/\D/g, "");
+
+    if (!digitsOnly) {
+      setMontoDisplay("");
+      setValue("monto", 0, { shouldValidate: true });
+      return;
+    }
+
+    const numericVal = parseInt(digitsOnly, 10);
+    const formatted = digitsOnly.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    setMontoDisplay(formatted);
+    setValue("monto", numericVal, { shouldValidate: true });
+  };
 
   if (!isOpen) return null;
 
@@ -209,7 +247,8 @@ export function PaymentModal({
       formData.append("cedula_cliente", client.cedula);
       formData.append("plan", client.plan.nombre);
       formData.append("plan_cliente", client.plan.nombre);
-      formData.append("monto", data.monto.toString());
+      const cleanMonto = parseCleanInteger(montoDisplay) || Math.round(data.monto);
+      formData.append("monto", cleanMonto.toString());
       formData.append("metodo_pago", currentMethod?.name || data.metodo_pago);
       formData.append("referencia", (data.referencia || "").trim());
       formData.append("fecha_pago", data.fecha_pago);
@@ -270,6 +309,7 @@ export function PaymentModal({
     reset();
     setSelectedFile(null);
     setSuccessData(null);
+    setMontoDisplay(formatThousands(activeInvoice?.saldoPendiente || 0));
     onClose();
   };
 
@@ -389,7 +429,8 @@ export function PaymentModal({
                     onChange: (e) => {
                       const selected = pendingInvoices.find((i) => i.id === e.target.value);
                       if (selected) {
-                        setValue("monto", selected.saldoPendiente);
+                        setValue("monto", selected.saldoPendiente, { shouldValidate: true });
+                        setMontoDisplay(formatThousands(selected.saldoPendiente));
                       }
                     },
                   })}
@@ -513,10 +554,11 @@ export function PaymentModal({
                     Valor Transferido ($ COP) <span className="text-rose-500">*</span>
                   </label>
                   <input
-                    type="number"
-                    step="100"
-                    placeholder="85000"
-                    {...register("monto", { valueAsNumber: true })}
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="50.000"
+                    value={montoDisplay}
+                    onChange={handleMontoChange}
                     className="w-full px-3.5 py-2.5 rounded-xl text-sm font-semibold font-sans tracking-tight tabular-nums bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400"
                   />
                   {errors.monto && (

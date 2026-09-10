@@ -4,6 +4,7 @@ import { useState } from "react";
 import { branding } from "@/config/branding";
 import { useConfig } from "@/context/ConfigContext";
 import { InstallPWAButton } from "./InstallPWAButton";
+import { HomeAdCarousel } from "./HomeAdCarousel";
 import {
   Search,
   Loader2,
@@ -11,7 +12,6 @@ import {
   Zap,
   ArrowRight,
   AlertCircle,
-  MessageCircle,
 } from "lucide-react";
 
 interface SearchScreenProps {
@@ -26,7 +26,6 @@ export function SearchScreen({ onSearch, isLoading, error }: SearchScreenProps) 
   const banner = config.homeAdBanner;
   const supportPhoneClean = (config.companyInfo?.supportPhone || "3185577157").replace(/\D/g, "");
   const phoneWithCountry = supportPhoneClean.startsWith("57") ? supportPhoneClean : `57${supportPhoneClean}`;
-  const promoImage = banner?.imageUrl || "/banner-promo-fibra.jpg";
   const defaultPromoMsg = "Hola, vi la promoción en el portal y deseo más información sobre el servicio de internet";
   const promoWhatsappMsg =
     banner?.whatsappMensaje &&
@@ -42,6 +41,10 @@ export function SearchScreen({ onSearch, isLoading, error }: SearchScreenProps) 
   const targetWhatsappUrl = banner?.linkWhatsapp && banner.linkWhatsapp.startsWith("http")
     ? banner.linkWhatsapp
     : `https://wa.me/${phoneWithCountry || "573185577157"}?text=${encodeURIComponent(promoWhatsappMsg)}`;
+
+  const bannerImages = Array.isArray(banner?.imageUrls) && banner.imageUrls.length > 0
+    ? banner.imageUrls
+    : [banner?.imageUrl || "/banner-promo-fibra.jpg"];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,46 +135,14 @@ export function SearchScreen({ onSearch, isLoading, error }: SearchScreenProps) 
         {/* ======================================================== */}
         {banner.enabled && (
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
-            <div className="w-full max-w-md mx-auto overflow-hidden rounded-2xl border border-cyan-500/20 bg-slate-900/60 shadow-xl">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={promoImage}
-                alt="Promoción Internet Aponte Plus"
-                className="w-full h-auto object-contain block rounded-t-2xl transition-transform duration-300"
-                loading="lazy"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = "/banner-promo-fibra.jpg";
-                }}
-              />
-
-              {/* Justo debajo de la imagen (sin taparla ni solaparse encima de ella) */}
-              <div className="p-4 bg-slate-900/90 border-t border-cyan-500/10 space-y-3">
-                {(banner.titulo || banner.descripcion) && (
-                  <div className="space-y-1">
-                    {banner.titulo && (
-                      <h4 className="text-sm font-bold text-white leading-snug tracking-tight">
-                        {banner.titulo}
-                      </h4>
-                    )}
-                    {banner.descripcion && (
-                      <p className="text-xs text-slate-300 leading-relaxed line-clamp-2">
-                        {banner.descripcion}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                <a
-                  href={targetWhatsappUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full py-3 px-4 rounded-xl font-bold text-xs sm:text-sm bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.01] active:scale-[0.99]"
-                >
-                  <MessageCircle className="w-4 h-4 flex-shrink-0" />
-                  <span>{promoButtonText}</span>
-                </a>
-              </div>
-            </div>
+            <HomeAdCarousel
+              images={bannerImages}
+              titulo={banner.titulo}
+              descripcion={banner.descripcion}
+              botonTexto={promoButtonText}
+              whatsappUrl={targetWhatsappUrl}
+              autoPlayInterval={4500}
+            />
           </div>
         )}
 

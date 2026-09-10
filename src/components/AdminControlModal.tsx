@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useConfig, PromotionItem } from "@/context/ConfigContext";
+import { HomeAdCarousel } from "./HomeAdCarousel";
 import {
   Sliders,
   Sparkles,
@@ -15,9 +16,12 @@ import {
   Megaphone,
   CreditCard,
   Building2,
-  ExternalLink,
   MessageCircle,
   Loader2,
+  Upload,
+  Image as ImageIcon,
+  Eye,
+  Star,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -31,7 +35,6 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
     config,
     updateCompanyInfo,
     addPromotion,
-    updatePromotion,
     deletePromotion,
     togglePromotion,
     updateGlobalAlert,
@@ -39,7 +42,7 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
     resetToDefaults,
   } = useConfig();
 
-  const [activeTab, setActiveTab] = useState<"promos" | "banner" | "comercial" | "alerta">("promos");
+  const [activeTab, setActiveTab] = useState<"banner" | "promos" | "comercial" | "alerta">("banner");
 
   // Estados locales para edición de Info Comercial
   const [companyName, setCompanyName] = useState(config.companyInfo.companyName);
@@ -52,14 +55,24 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
   const [alertMessage, setAlertMessage] = useState(config.globalAlert.message);
   const [alertType, setAlertType] = useState<"warning" | "info">(config.globalAlert.type);
 
-  // Estados locales para Banner Publicitario de Inicio
+  // Estados locales para Banner Publicitario de Inicio (Hasta 5 imágenes)
   const [bannerEnabled, setBannerEnabled] = useState(config.homeAdBanner?.enabled ?? true);
-  const [bannerImageUrl, setBannerImageUrl] = useState(config.homeAdBanner?.imageUrl ?? "/banner-promo-fibra.jpg");
-  const [bannerTitulo, setBannerTitulo] = useState(config.homeAdBanner?.titulo ?? "¡Pásate a Fibra Óptica con Alta Velocidad!");
-  const [bannerDescripcion, setBannerDescripcion] = useState(
-    config.homeAdBanner?.descripcion ?? "Disfruta de la mejor conexión de la región con 100% fibra óptica dedicada."
+  const [bannerImageUrls, setBannerImageUrls] = useState<string[]>(
+    Array.isArray(config.homeAdBanner?.imageUrls) && config.homeAdBanner.imageUrls.length > 0
+      ? config.homeAdBanner.imageUrls
+      : [config.homeAdBanner?.imageUrl || "/banner-promo-fibra.jpg"]
   );
-  const [bannerBotonTexto, setBannerBotonTexto] = useState(config.homeAdBanner?.botonTexto ?? "📲 Preguntar por WhatsApp");
+  const [newImageUrlInput, setNewImageUrlInput] = useState("");
+  const [bannerTitulo, setBannerTitulo] = useState(
+    config.homeAdBanner?.titulo ?? "¡Pásate a Fibra Óptica con Alta Velocidad!"
+  );
+  const [bannerDescripcion, setBannerDescripcion] = useState(
+    config.homeAdBanner?.descripcion ??
+      "Disfruta de la mejor conexión de la región con 100% fibra óptica dedicada."
+  );
+  const [bannerBotonTexto, setBannerBotonTexto] = useState(
+    config.homeAdBanner?.botonTexto ?? "📲 Preguntar por WhatsApp"
+  );
   const [bannerWhatsappMensaje, setBannerWhatsappMensaje] = useState(
     config.homeAdBanner?.whatsappMensaje ??
       "Hola, vi la promoción en el portal y deseo más información sobre el servicio de internet"
@@ -78,7 +91,11 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
 
       if (config.homeAdBanner) {
         setBannerEnabled(config.homeAdBanner.enabled);
-        setBannerImageUrl(config.homeAdBanner.imageUrl);
+        const currentImgs =
+          Array.isArray(config.homeAdBanner.imageUrls) && config.homeAdBanner.imageUrls.length > 0
+            ? config.homeAdBanner.imageUrls
+            : [config.homeAdBanner.imageUrl || "/banner-promo-fibra.jpg"];
+        setBannerImageUrls(currentImgs);
         setBannerTitulo(config.homeAdBanner.titulo);
         setBannerDescripcion(config.homeAdBanner.descripcion);
         setBannerBotonTexto(config.homeAdBanner.botonTexto);
@@ -87,6 +104,7 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
     }
   }, [isOpen, config]);
 
+  // Manejo de carga de archivos locales a base64
   const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -94,13 +112,51 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
       toast.error("La imagen no debe superar los 3 MB.");
       return;
     }
+    if (bannerImageUrls.length >= 5) {
+      toast.warning("Límite alcanzado: máximo 5 imágenes para el carrusel publicitario.");
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = () => {
       const base64 = reader.result as string;
-      setBannerImageUrl(base64);
-      toast.success("Imagen cargada con éxito en vista previa.");
+      setBannerImageUrls((prev) => [...prev, base64].slice(0, 5));
+      toast.success(`Imagen añadida (${bannerImageUrls.length + 1}/5).`);
+      e.target.value = ""; // Limpiar input file
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleAddImageUrl = () => {
+    const trimmed = newImageUrlInput.trim();
+    if (!trimmed) return;
+    if (bannerImageUrls.length >= 5) {
+      toast.warning("Máximo 5 imágenes permitidas en el carrusel.");
+      return;
+    }
+    setBannerImageUrls((prev) => [...prev, trimmed].slice(0, 5));
+    setNewImageUrlInput("");
+    toast.success(`Imagen añadida al carrusel (${bannerImageUrls.length + 1}/5).`);
+  };
+
+  const handleRemoveImage = (indexToRemove: number) => {
+    if (bannerImageUrls.length <= 1) {
+      toast.info("Debe haber al menos 1 imagen en el banner.");
+      return;
+    }
+    setBannerImageUrls((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+    toast.info("Imagen retirada del carrusel.");
+  };
+
+  const handleSetPrimaryImage = (index: number) => {
+    if (index === 0) return;
+    setBannerImageUrls((prev) => {
+      const copy = [...prev];
+      const selected = copy.splice(index, 1)[0];
+      copy.unshift(selected);
+      return copy;
+    });
+    toast.success("Imagen establecida como principal (primera diapositiva).");
   };
 
   const [isSavingBanner, setIsSavingBanner] = useState(false);
@@ -109,41 +165,47 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
     setIsSavingBanner(true);
     const cleanPhone = (supportPhone || "3185577157").replace(/\D/g, "");
     const phoneWithCountry = cleanPhone.startsWith("57") ? cleanPhone : `57${cleanPhone}`;
-    const defaultMsg = "Hola, vi la promoción en el portal y deseo más información sobre el servicio de internet";
+    const defaultMsg =
+      "Hola, vi la promoción en el portal y deseo más información sobre el servicio de internet";
     const waMsg = bannerWhatsappMensaje.trim() || defaultMsg;
     const linkWhatsapp = `https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(waMsg)}`;
+    const finalImgs = bannerImageUrls.length > 0 ? bannerImageUrls : ["/banner-promo-fibra.jpg"];
 
     try {
-      const res = await fetch("/api/promociones", {
+      // Guardar directamente en el endpoint unificado del servidor
+      const res = await fetch("/api/configuracion", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           pin: "1130",
-          imagenUrl: bannerImageUrl.trim() || "/banner-promo-fibra.jpg",
-          titulo: bannerTitulo.trim() || "¡Pásate a Fibra Óptica con Alta Velocidad!",
-          descripcion:
-            bannerDescripcion.trim() ||
-            "Disfruta de la mejor conexión de la región con 100% fibra óptica dedicada.",
-          botonTexto: bannerBotonTexto.trim() || "📲 Preguntar por WhatsApp",
-          linkWhatsapp,
-          whatsappMensaje: waMsg,
-          activa: bannerEnabled,
+          config: {
+            homeAdBanner: {
+              enabled: bannerEnabled,
+              imageUrl: finalImgs[0],
+              imageUrls: finalImgs,
+              titulo: bannerTitulo.trim() || "¡Pásate a Fibra Óptica con Alta Velocidad!",
+              descripcion:
+                bannerDescripcion.trim() ||
+                "Disfruta de la mejor conexión de la región con 100% fibra óptica dedicada.",
+              botonTexto: bannerBotonTexto.trim() || "📲 Preguntar por WhatsApp",
+              whatsappMensaje: waMsg,
+              linkWhatsapp,
+            },
+          },
         }),
       });
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.error || "Error al persistir la promoción en el servidor");
+        throw new Error(data.error || "Error al persistir la configuración en el servidor");
       }
 
-      const finalImg = data.promocion?.imagenUrl || data.imagenUrl || bannerImageUrl.trim();
-      setBannerImageUrl(finalImg);
-
-      updateHomeAdBanner({
+      await updateHomeAdBanner({
         enabled: bannerEnabled,
-        imageUrl: finalImg,
+        imageUrl: finalImgs[0],
+        imageUrls: finalImgs,
         titulo: bannerTitulo.trim() || "¡Pásate a Fibra Óptica con Alta Velocidad!",
         descripcion:
           bannerDescripcion.trim() ||
@@ -153,8 +215,8 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
         linkWhatsapp,
       });
 
-      toast.success("¡Promoción publicada globalmente!", {
-        description: "Guardada en el servidor central: todos los clientes y visitantes la verán al instante.",
+      toast.success("¡Carrusel publicitario guardado en el servidor!", {
+        description: `Sincronizadas ${finalImgs.length} imágenes en la base de datos global.`,
       });
     } catch (err: any) {
       console.error(err);
@@ -163,6 +225,74 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
       });
     } finally {
       setIsSavingBanner(false);
+    }
+  };
+
+  // Guardar Datos Comerciales en el Servidor
+  const handleSaveCompany = async () => {
+    try {
+      const res = await fetch("/api/configuracion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pin: "1130",
+          config: {
+            companyInfo: {
+              companyName: companyName.trim() || "Internet Aponte Plus",
+              supportPhone: supportPhone.trim() || "3185577157",
+              nequiNumber: nequiNumber.trim() || "311 276 0959",
+              accountHolder: accountHolder.trim() || "Orlando Aponte",
+            },
+          },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error);
+
+      await updateCompanyInfo({
+        companyName: companyName.trim() || "Internet Aponte Plus",
+        supportPhone: supportPhone.trim() || "3185577157",
+        nequiNumber: nequiNumber.trim() || "311 276 0959",
+        accountHolder: accountHolder.trim() || "Orlando Aponte",
+      });
+      toast.success("Datos comerciales guardados globalmente en el servidor.");
+    } catch (err: any) {
+      toast.error("Error al guardar datos comerciales", { description: err.message });
+    }
+  };
+
+  // Guardar Aviso Global en el Servidor
+  const handleSaveAlert = async () => {
+    try {
+      const res = await fetch("/api/configuracion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pin: "1130",
+          config: {
+            globalAlert: {
+              enabled: alertEnabled,
+              message: alertMessage.trim() || "Aviso de mantenimiento programado.",
+              type: alertType,
+            },
+          },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error);
+
+      await updateGlobalAlert({
+        enabled: alertEnabled,
+        message: alertMessage.trim() || "Aviso de mantenimiento programado.",
+        type: alertType,
+      });
+      toast.success(
+        alertEnabled
+          ? "Aviso publicado globalmente en el servidor para todos los clientes."
+          : "Aviso desactivado en el servidor."
+      );
+    } catch (err: any) {
+      toast.error("Error al guardar aviso", { description: err.message });
     }
   };
 
@@ -180,38 +310,13 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
     activo: true,
   });
 
-  if (!isOpen) return null;
-
-  const handleSaveCompany = () => {
-    updateCompanyInfo({
-      companyName: companyName.trim() || "Internet Aponte Plus",
-      supportPhone: supportPhone.trim() || "3185577157",
-      nequiNumber: nequiNumber.trim() || "311 276 0959",
-      accountHolder: accountHolder.trim() || "Orlando Aponte",
-    });
-    toast.success("Información comercial actualizada correctamente.");
-  };
-
-  const handleSaveAlert = () => {
-    updateGlobalAlert({
-      enabled: alertEnabled,
-      message: alertMessage.trim() || "Aviso de mantenimiento programado.",
-      type: alertType,
-    });
-    toast.success(
-      alertEnabled
-        ? "Aviso de mantenimiento publicado en todo el portal."
-        : "Aviso de mantenimiento desactivado."
-    );
-  };
-
-  const handleAddPromoSubmit = (e: React.FormEvent) => {
+  const handleAddPromoSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPromo.titulo.trim() || !newPromo.descripcion.trim()) {
       toast.error("El título y la descripción son obligatorios.");
       return;
     }
-    addPromotion(newPromo);
+    await addPromotion(newPromo);
     setIsAddingPromo(false);
     setNewPromo({
       tag: "⚡ Nueva Oferta",
@@ -224,77 +329,89 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
       imagenUrl: "",
       activo: true,
     });
-    toast.success("Nueva promoción añadida al carrusel.");
+    toast.success("Nueva promoción guardada en el servidor.");
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 md:p-6 bg-slate-950/85 backdrop-blur-xl animate-in fade-in duration-200">
       <div
-        className="relative w-full max-w-2xl max-h-[90vh] flex flex-col rounded-3xl bg-slate-900 border border-slate-700 shadow-2xl text-slate-100 overflow-hidden"
+        className="relative w-full max-w-5xl h-[92vh] max-h-[860px] flex flex-col rounded-[2rem] bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-slate-700/80 shadow-[0_25px_70px_rgba(0,0,0,0.7)] text-slate-100 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/50">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
-              <Sliders className="w-5 h-5" />
+        {/* Glow sutil superior */}
+        <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-amber-500/50 to-transparent pointer-events-none" />
+
+        {/* ─── HEADER ────────────────────────────────────────────────────────── */}
+        <div className="flex items-center justify-between px-6 sm:px-8 py-4 border-b border-slate-800/90 bg-slate-950/70">
+          <div className="flex items-center gap-3.5">
+            <div className="p-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 shadow-inner">
+              <Sliders className="w-5 h-5" strokeWidth={2.2} />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-white">Panel de Control Interno</h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-sans font-bold tracking-tight tabular-nums bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                  Panel de Control Interno
+                </h2>
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold tracking-tight tabular-nums bg-amber-500/15 text-amber-300 border border-amber-500/30">
                   PIN 1130
+                </span>
+                <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Base de Datos Servidor
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Administración en vivo sin tocar código de Aponte Plus
+                Sincronización global en tiempo real • Cero almacenamiento local
               </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-2 rounded-2xl text-slate-400 hover:text-white hover:bg-slate-800/80 transition-all cursor-pointer"
+            title="Cerrar ventana"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Tab selector */}
-        <div className="flex items-center gap-1 px-6 pt-3 border-b border-slate-800 bg-slate-900/60 text-xs font-semibold overflow-x-auto">
-          <button
-            onClick={() => setActiveTab("promos")}
-            className={`flex items-center gap-2 px-4 py-2.5 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === "promos"
-                ? "border-amber-400 text-amber-300 font-bold"
-                : "border-transparent text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>Promociones ({config.promotions.length})</span>
-          </button>
-
+        {/* ─── TABS DE NAVEGACIÓN ─────────────────────────────────────────────── */}
+        <div className="flex items-center gap-1.5 px-6 sm:px-8 py-2.5 border-b border-slate-800/80 bg-slate-950/40 text-xs font-semibold overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           <button
             onClick={() => setActiveTab("banner")}
-            className={`flex items-center gap-2 px-4 py-2.5 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
               activeTab === "banner"
-                ? "border-amber-400 text-amber-300 font-bold"
-                : "border-transparent text-slate-400 hover:text-slate-200"
+                ? "bg-gradient-to-r from-amber-500/20 to-orange-500/15 border border-amber-500/40 text-amber-300 font-bold shadow-sm shadow-amber-950/30"
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent"
             }`}
           >
             <Megaphone className="w-4 h-4" />
-            <span>Banner de Inicio</span>
+            <span>Banner de Inicio ({bannerImageUrls.length} imgs)</span>
             {config.homeAdBanner?.enabled && (
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             )}
           </button>
 
           <button
+            onClick={() => setActiveTab("promos")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === "promos"
+                ? "bg-gradient-to-r from-amber-500/20 to-orange-500/15 border border-amber-500/40 text-amber-300 font-bold shadow-sm shadow-amber-950/30"
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent"
+            }`}
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>Promociones Carrusel ({config.promotions.length})</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab("comercial")}
-            className={`flex items-center gap-2 px-4 py-2.5 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
               activeTab === "comercial"
-                ? "border-amber-400 text-amber-300 font-bold"
-                : "border-transparent text-slate-400 hover:text-slate-200"
+                ? "bg-gradient-to-r from-amber-500/20 to-orange-500/15 border border-amber-500/40 text-amber-300 font-bold shadow-sm shadow-amber-950/30"
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent"
             }`}
           >
             <Building2 className="w-4 h-4" />
@@ -303,242 +420,43 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
 
           <button
             onClick={() => setActiveTab("alerta")}
-            className={`flex items-center gap-2 px-4 py-2.5 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
               activeTab === "alerta"
-                ? "border-amber-400 text-amber-300 font-bold"
-                : "border-transparent text-slate-400 hover:text-slate-200"
+                ? "bg-gradient-to-r from-amber-500/20 to-orange-500/15 border border-amber-500/40 text-amber-300 font-bold shadow-sm shadow-amber-950/30"
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent"
             }`}
           >
             <AlertTriangle className="w-4 h-4" />
-            <span>Aviso Global / Mantenimiento</span>
+            <span>Aviso Global</span>
             {config.globalAlert.enabled && (
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
             )}
           </button>
         </div>
 
-        {/* Content Body */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1 text-sm">
+        {/* ─── CUERPO DEL CONTENIDO ──────────────────────────────────────────── */}
+        <div className="p-6 sm:p-8 overflow-y-auto flex-1 text-sm [scrollbar-width:thin] [scrollbar-color:#334155_transparent]">
+          
           {/* ======================================================== */}
-          {/* TAB 1: PROMOCIONES Y BANNERS                            */}
-          {/* ======================================================== */}
-          {activeTab === "promos" && (
-            <div className="space-y-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-bold text-white text-base">Promociones en Carrusel</h3>
-                  <p className="text-xs text-slate-400">
-                    Activa, desactiva o añade promociones visibles arriba del balance
-                  </p>
-                </div>
-                {!isAddingPromo && (
-                  <button
-                    type="button"
-                    onClick={() => setIsAddingPromo(true)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Nueva Promoción
-                  </button>
-                )}
-              </div>
-
-              {/* Formulario de Nueva Promo */}
-              {isAddingPromo && (
-                <form
-                  onSubmit={handleAddPromoSubmit}
-                  className="p-5 rounded-2xl bg-slate-800/80 border border-slate-700 space-y-4 animate-in fade-in"
-                >
-                  <div className="flex items-center justify-between border-b border-slate-700 pb-2">
-                    <span className="font-bold text-amber-400 text-xs uppercase tracking-wider">
-                      Crear Nueva Promoción
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setIsAddingPromo(false)}
-                      className="text-xs text-slate-400 hover:text-white"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs text-slate-300 font-semibold block mb-1">
-                        Etiqueta (Badge)
-                      </label>
-                      <input
-                        type="text"
-                        value={newPromo.tag}
-                        onChange={(e) => setNewPromo({ ...newPromo, tag: e.target.value })}
-                        placeholder="Ej: 🔥 Oferta Especial"
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-slate-300 font-semibold block mb-1">
-                        Texto del Botón
-                      </label>
-                      <input
-                        type="text"
-                        value={newPromo.botonTexto}
-                        onChange={(e) => setNewPromo({ ...newPromo, botonTexto: e.target.value })}
-                        placeholder="Ej: Pedir Upgrade"
-                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-slate-300 font-semibold block mb-1">
-                      Título Llamativo
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={newPromo.titulo}
-                      onChange={(e) => setNewPromo({ ...newPromo, titulo: e.target.value })}
-                      placeholder="Ej: Pásate a 100 Megas simétricas por solo $10.000 más"
-                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-slate-300 font-semibold block mb-1">
-                      Descripción
-                    </label>
-                    <textarea
-                      rows={2}
-                      required
-                      value={newPromo.descripcion}
-                      onChange={(e) => setNewPromo({ ...newPromo, descripcion: e.target.value })}
-                      placeholder="Detalles y condiciones de la oferta..."
-                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs resize-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-slate-300 font-semibold block mb-1">
-                      Mensaje Prellenado para WhatsApp
-                    </label>
-                    <input
-                      type="text"
-                      value={newPromo.whatsappMensaje}
-                      onChange={(e) => setNewPromo({ ...newPromo, whatsappMensaje: e.target.value })}
-                      placeholder="Mensaje que enviará el abonado al hacer clic..."
-                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-slate-300 font-semibold block mb-1">
-                      URL de Imagen / Banner (Opcional)
-                    </label>
-                    <input
-                      type="url"
-                      value={newPromo.imagenUrl || ""}
-                      onChange={(e) => setNewPromo({ ...newPromo, imagenUrl: e.target.value })}
-                      placeholder="https://..."
-                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs"
-                    />
-                  </div>
-
-                  <div className="pt-2 flex justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsAddingPromo(false)}
-                      className="px-4 py-2 rounded-xl text-xs bg-slate-800 text-slate-300 hover:text-white"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-5 py-2 rounded-xl text-xs font-bold bg-amber-500 text-slate-950 hover:bg-amber-400"
-                    >
-                      Guardar Promoción
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {/* Lista de Promociones Actuales */}
-              <div className="space-y-3">
-                {config.promotions.map((promo) => (
-                  <div
-                    key={promo.id}
-                    className={`p-4 rounded-2xl border transition-all space-y-3 ${
-                      promo.activo
-                        ? "bg-slate-800/60 border-slate-700"
-                        : "bg-slate-900/50 border-slate-800 opacity-60"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-700 text-slate-200">
-                            {promo.tag}
-                          </span>
-                          <span
-                            className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                              promo.activo
-                                ? "bg-emerald-500/20 text-emerald-400"
-                                : "bg-slate-700 text-slate-400"
-                            }`}
-                          >
-                            {promo.activo ? "Visible" : "Oculta"}
-                          </span>
-                        </div>
-                        <h4 className="font-bold text-white text-sm">{promo.titulo}</h4>
-                        <p className="text-xs text-slate-400">{promo.descripcion}</p>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => togglePromotion(promo.id)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
-                            promo.activo
-                              ? "bg-emerald-600/30 text-emerald-300 hover:bg-emerald-600/40"
-                              : "bg-slate-700 text-slate-400 hover:text-white"
-                          }`}
-                        >
-                          {promo.activo ? "Desactivar" : "Activar"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            deletePromotion(promo.id);
-                            toast.info("Promoción eliminada.");
-                          }}
-                          className="p-1.5 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-                          title="Eliminar promoción"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* ======================================================== */}
-          {/* TAB 2: BANNER PUBLICITARIO DE INICIO                    */}
+          {/* TAB 1: BANNER DE INICIO CON CARRUSEL DE HASTA 5 IMÁGENES */}
           {/* ======================================================== */}
           {activeTab === "banner" && (
-            <div className="space-y-5">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+            <div className="space-y-6">
+              {/* Barra superior de visibilidad */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-800/50 border border-slate-700/60 shadow-sm">
                 <div>
-                  <h3 className="font-bold text-white text-base">Banner Publicitario de Inicio</h3>
-                  <p className="text-xs text-slate-400">
-                    Configura la oferta visual que verán los usuarios en la pantalla de ingreso
+                  <h3 className="font-bold text-white text-base flex items-center gap-2">
+                    <Megaphone className="w-4 h-4 text-amber-400" />
+                    Carrusel Publicitario de Inicio (Hasta 5 Imágenes)
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Carrusel dinámico con AutoPlay (cada 4.5s), soporte táctil Swipe e indicadores de puntos
                   </p>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-slate-400">
-                    {bannerEnabled ? "Visible en Inicio" : "Oculto"}
+                <div className="flex items-center gap-3 bg-slate-900/90 px-4 py-2 rounded-xl border border-slate-700/80 self-start sm:self-auto">
+                  <span className={`text-xs font-bold ${bannerEnabled ? "text-emerald-400" : "text-slate-400"}`}>
+                    {bannerEnabled ? "Visible en Inicio" : "Banner Oculto"}
                   </span>
                   <button
                     type="button"
@@ -556,216 +474,529 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                 </div>
               </div>
 
-              {/* Vista Previa de la Imagen */}
-              <div className="space-y-2">
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                  Vista Previa del Banner Adaptativo
-                </label>
-                <div className="w-full max-w-md mx-auto overflow-hidden rounded-2xl border border-cyan-500/20 bg-slate-900/60 shadow-xl">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={bannerImageUrl || "/banner-promo-fibra.jpg"}
-                    alt="Vista previa"
-                    className="w-full h-auto object-contain block rounded-t-2xl transition-transform duration-300"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = "/banner-promo-fibra.jpg";
-                    }}
-                  />
-                  <div className="p-4 bg-slate-900/90 border-t border-cyan-500/10 space-y-2">
-                    <p className="text-sm font-bold text-white leading-snug">{bannerTitulo || "¡Pásate a Fibra Óptica con Alta Velocidad!"}</p>
-                    <p className="text-xs text-slate-300 leading-relaxed line-clamp-2">{bannerDescripcion || "Descripción breve"}</p>
-                    <div className="pt-1">
-                      <div className="w-full py-2.5 px-4 rounded-xl font-bold text-xs bg-emerald-600 text-white flex items-center justify-center gap-2">
-                        <MessageCircle className="w-4 h-4 flex-shrink-0" />
-                        <span>{bannerBotonTexto || "📲 Preguntar por WhatsApp"}</span>
-                      </div>
-                    </div>
+              {/* GRID PRINCIPAL: Vista previa en carrusel a la izquierda, formulario a la derecha */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-7 items-start">
+                
+                {/* ── COLUMNA IZQUIERDA: CARRUSEL EN VIVO ── */}
+                <div className="lg:col-span-5 space-y-3 lg:sticky lg:top-0">
+                  <div className="flex items-center justify-between px-1">
+                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Eye className="w-3.5 h-3.5 text-cyan-400" />
+                      Vista Previa Interactiva del Carrusel
+                    </label>
+                    <span className="text-[10px] text-cyan-400/80 bg-cyan-950/60 border border-cyan-500/20 px-2 py-0.5 rounded-full font-medium">
+                      AutoPlay • Swipe
+                    </span>
                   </div>
-                </div>
-              </div>
 
-              {/* Campos de Configuración */}
-              <div className="space-y-4">
-                {/* 1. URL Directa de Imagen */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    URL Directa de la Imagen (Imgur, Postimages, Canva o Servidor)
-                  </label>
-                  <input
-                    type="text"
-                    value={bannerImageUrl}
-                    onChange={(e) => setBannerImageUrl(e.target.value)}
-                    placeholder="https://i.imgur.com/ejemplo.jpg o /banner-promo-fibra.jpg"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-xs font-sans font-medium tracking-tight focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  {/* Render del Carrusel Real */}
+                  <HomeAdCarousel
+                    images={bannerImageUrls}
+                    titulo={bannerTitulo}
+                    descripcion={bannerDescripcion}
+                    botonTexto={bannerBotonTexto}
+                    whatsappUrl="#"
+                    autoPlayInterval={4500}
                   />
-                </div>
 
-                {/* 2. Subir Archivo Local */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    O Cargar Imagen desde tu Equipo (Convierte a Base64)
-                  </label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageFileChange}
-                    className="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-amber-400 hover:file:bg-slate-700 cursor-pointer"
-                  />
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Formatos recomendados: PNG, JPG o WebP en cualquier proporción (panorámica horizontal, volante vertical o cuadrada 1:1) sin recortes.
+                  <p className="text-[11px] text-slate-400 text-center px-2">
+                    💡 Puedes arrastrar con el mouse o deslizar con el dedo en móviles para probar el Swipe.
                   </p>
                 </div>
 
-                {/* 3. Título de la Promo */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Título de la Promoción
-                  </label>
-                  <input
-                    type="text"
-                    value={bannerTitulo}
-                    onChange={(e) => setBannerTitulo(e.target.value)}
-                    placeholder="Ej. ¡Pásate a Fibra Óptica con 50% de Descuento!"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 font-bold"
-                  />
-                </div>
+                {/* ── COLUMNA DERECHA: GESTIÓN DE IMÁGENES Y TEXTOS ── */}
+                <div className="lg:col-span-7 space-y-4">
+                  
+                  {/* Bloque 1: Galería de Imágenes del Carrusel (Hasta 5) */}
+                  <div className="p-4 sm:p-5 rounded-2xl bg-slate-800/40 border border-slate-700/60 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <ImageIcon className="w-4 h-4 text-amber-400" />
+                        <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                          1. Imágenes del Carrusel ({bannerImageUrls.length}/5)
+                        </h4>
+                      </div>
+                      <span className="text-[11px] text-slate-400 font-medium">
+                        {5 - bannerImageUrls.length} disponibles
+                      </span>
+                    </div>
 
-                {/* 4. Descripción Breve */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Descripción Breve de la Oferta
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={bannerDescripcion}
-                    onChange={(e) => setBannerDescripcion(e.target.value)}
-                    placeholder="Describe los beneficios del plan o servicio..."
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400"
-                  />
-                </div>
+                    {/* Strip de Miniaturas Cargadas */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                      {bannerImageUrls.map((imgSrc, idx) => (
+                        <div
+                          key={idx}
+                          className="relative group rounded-xl overflow-hidden border border-slate-700 bg-slate-900 aspect-[4/3] flex items-center justify-center"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={imgSrc}
+                            alt={`Miniatura ${idx + 1}`}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = "/banner-promo-fibra.jpg";
+                            }}
+                          />
 
-                {/* 5. Texto del Botón */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Texto del Botón de Acción
-                  </label>
-                  <input
-                    type="text"
-                    value={bannerBotonTexto}
-                    onChange={(e) => setBannerBotonTexto(e.target.value)}
-                    placeholder="Ej. Me interesa esta oferta"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400"
-                  />
-                </div>
+                          {/* Badge de Posición / Principal */}
+                          <div className="absolute top-1.5 left-1.5">
+                            {idx === 0 ? (
+                              <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-amber-500 text-slate-950 flex items-center gap-1 shadow-sm">
+                                <Star className="w-2.5 h-2.5 fill-current" />
+                                Principal
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-slate-950/80 text-slate-300 backdrop-blur-xs">
+                                #{idx + 1}
+                              </span>
+                            )}
+                          </div>
 
-                {/* 6. Mensaje de WhatsApp */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Mensaje Predeterminado para WhatsApp (318 557 7157)
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={bannerWhatsappMensaje}
-                    onChange={(e) => setBannerWhatsappMensaje(e.target.value)}
-                    placeholder="Mensaje que enviará el cliente al tocar el botón..."
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400"
-                  />
-                </div>
-              </div>
+                          {/* Acciones en Hover */}
+                          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 p-1">
+                            {idx !== 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleSetPrimaryImage(idx)}
+                                className="p-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-bold cursor-pointer"
+                                title="Hacer principal"
+                              >
+                                <Star className="w-3.5 h-3.5 fill-current" />
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveImage(idx)}
+                              className="p-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[10px] cursor-pointer"
+                              title="Eliminar imagen"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
 
-              {/* Botón Guardar Cambios */}
-              <div className="pt-3 border-t border-slate-800 flex justify-end">
-                <button
-                  type="button"
-                  disabled={isSavingBanner}
-                  onClick={handleSaveBanner}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 shadow-md transition-all cursor-pointer"
-                >
-                  {isSavingBanner ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Guardando en Servidor...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Check className="w-4 h-4" />
-                      <span>Guardar Cambios del Banner</span>
-                    </>
-                  )}
-                </button>
+                      {/* Botón de Carga / Añadir si hay < 5 */}
+                      {bannerImageUrls.length < 5 && (
+                        <label className="border-2 border-dashed border-slate-700 hover:border-amber-400/60 rounded-xl flex flex-col items-center justify-center p-3 text-center cursor-pointer transition-colors bg-slate-900/40 hover:bg-slate-900/80 aspect-[4/3]">
+                          <Upload className="w-5 h-5 text-amber-400 mb-1" />
+                          <span className="text-[11px] font-bold text-slate-200">Añadir Foto</span>
+                          <span className="text-[9px] text-slate-400">Hasta 3 MB</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleImageFileChange}
+                            className="hidden"
+                          />
+                        </label>
+                      )}
+                    </div>
+
+                    {/* O ingresar URL directa */}
+                    {bannerImageUrls.length < 5 && (
+                      <div className="pt-2 border-t border-slate-700/60 flex gap-2">
+                        <input
+                          type="text"
+                          value={newImageUrlInput}
+                          onChange={(e) => setNewImageUrlInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleAddImageUrl();
+                            }
+                          }}
+                          placeholder="O pega una URL directa de imagen (https://...)"
+                          className="flex-1 px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddImageUrl}
+                          disabled={!newImageUrlInput.trim()}
+                          className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-amber-300 disabled:opacity-40 cursor-pointer border border-slate-700"
+                        >
+                          Añadir
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Bloque 2: Textos de la Oferta */}
+                  <div className="p-4 sm:p-5 rounded-2xl bg-slate-800/40 border border-slate-700/60 space-y-3.5">
+                    <div className="flex items-center gap-2">
+                      <Megaphone className="w-4 h-4 text-amber-400" />
+                      <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                        2. Textos de la Oferta
+                      </h4>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                        Título Principal
+                      </label>
+                      <input
+                        type="text"
+                        value={bannerTitulo}
+                        onChange={(e) => setBannerTitulo(e.target.value)}
+                        placeholder="Ej. ¡Pásate a Fibra Óptica con Instalación Gratis!"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                        Descripción o Condiciones
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={bannerDescripcion}
+                        onChange={(e) => setBannerDescripcion(e.target.value)}
+                        placeholder="Describe los beneficios del plan o promoción..."
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Bloque 3: Acción de WhatsApp */}
+                  <div className="p-4 sm:p-5 rounded-2xl bg-slate-800/40 border border-slate-700/60 space-y-3.5">
+                    <div className="flex items-center gap-2">
+                      <MessageCircle className="w-4 h-4 text-emerald-400" />
+                      <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                        3. Acción de WhatsApp
+                      </h4>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                        Texto del Botón
+                      </label>
+                      <input
+                        type="text"
+                        value={bannerBotonTexto}
+                        onChange={(e) => setBannerBotonTexto(e.target.value)}
+                        placeholder="📲 Preguntar por WhatsApp"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                        Mensaje Predeterminado que Enviará el Cliente
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={bannerWhatsappMensaje}
+                        onChange={(e) => setBannerWhatsappMensaje(e.target.value)}
+                        placeholder="Mensaje prellenado para WhatsApp..."
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Botón Guardar Cambios Destacado */}
+                  <div className="pt-2 flex justify-end">
+                    <button
+                      type="button"
+                      disabled={isSavingBanner}
+                      onClick={handleSaveBanner}
+                      className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-8 py-3 rounded-2xl text-xs font-bold bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 hover:brightness-110 active:scale-[0.99] disabled:opacity-50 text-slate-950 shadow-lg shadow-amber-500/25 transition-all cursor-pointer"
+                    >
+                      {isSavingBanner ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Guardando en el Servidor...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-4 h-4" strokeWidth={2.5} />
+                          <span>Guardar y Publicar Carrusel</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                </div>
               </div>
             </div>
           )}
 
           {/* ======================================================== */}
-          {/* TAB 2: INFORMACIÓN COMERCIAL                            */}
+          {/* TAB 2: PROMOCIONES EN CARRUSEL                          */}
+          {/* ======================================================== */}
+          {activeTab === "promos" && (
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                <div>
+                  <h3 className="font-bold text-white text-base">Promociones en Carrusel</h3>
+                  <p className="text-xs text-slate-400">
+                    Se muestran dinámicamente sobre la tarjeta de balance de los usuarios autenticados
+                  </p>
+                </div>
+                {!isAddingPromo && (
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingPromo(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all cursor-pointer shadow-md shadow-amber-500/20 self-start sm:self-auto"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Nueva Promoción
+                  </button>
+                )}
+              </div>
+
+              {/* Formulario de Nueva Promo */}
+              {isAddingPromo && (
+                <form
+                  onSubmit={handleAddPromoSubmit}
+                  className="p-6 rounded-2xl bg-slate-800/80 border border-slate-700 space-y-4 animate-in fade-in"
+                >
+                  <div className="flex items-center justify-between border-b border-slate-700 pb-3">
+                    <span className="font-bold text-amber-400 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4" />
+                      Crear Nueva Promoción
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingPromo(false)}
+                      className="text-xs text-slate-400 hover:text-white px-2 py-1 rounded-lg hover:bg-slate-700"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs text-slate-300 font-semibold block mb-1">
+                        Etiqueta (Badge)
+                      </label>
+                      <input
+                        type="text"
+                        value={newPromo.tag}
+                        onChange={(e) => setNewPromo({ ...newPromo, tag: e.target.value })}
+                        placeholder="Ej: 🔥 Oferta Especial"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-300 font-semibold block mb-1">
+                        Texto del Botón
+                      </label>
+                      <input
+                        type="text"
+                        value={newPromo.botonTexto}
+                        onChange={(e) => setNewPromo({ ...newPromo, botonTexto: e.target.value })}
+                        placeholder="Ej: Pedir Upgrade"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-slate-300 font-semibold block mb-1">
+                      Título Llamativo
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newPromo.titulo}
+                      onChange={(e) => setNewPromo({ ...newPromo, titulo: e.target.value })}
+                      placeholder="Ej: Pásate a 100 Megas simétricas por solo $10.000 más"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-slate-300 font-semibold block mb-1">
+                      Descripción
+                    </label>
+                    <textarea
+                      rows={2}
+                      required
+                      value={newPromo.descripcion}
+                      onChange={(e) => setNewPromo({ ...newPromo, descripcion: e.target.value })}
+                      placeholder="Detalles y condiciones de la oferta..."
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs resize-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs text-slate-300 font-semibold block mb-1">
+                        Mensaje para WhatsApp
+                      </label>
+                      <input
+                        type="text"
+                        value={newPromo.whatsappMensaje}
+                        onChange={(e) => setNewPromo({ ...newPromo, whatsappMensaje: e.target.value })}
+                        placeholder="Mensaje al tocar el botón..."
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-300 font-semibold block mb-1">
+                        URL de Imagen (Opcional)
+                      </label>
+                      <input
+                        type="url"
+                        value={newPromo.imagenUrl || ""}
+                        onChange={(e) => setNewPromo({ ...newPromo, imagenUrl: e.target.value })}
+                        placeholder="https://..."
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-2 flex justify-end gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingPromo(false)}
+                      className="px-4 py-2 rounded-xl text-xs bg-slate-800 text-slate-300 hover:text-white"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md shadow-amber-500/20 cursor-pointer"
+                    >
+                      Añadir al Carrusel
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Lista de Promociones en Grid de 2 Columnas */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {config.promotions.map((promo) => (
+                  <div
+                    key={promo.id}
+                    className={`p-4 rounded-2xl border transition-all flex flex-col justify-between ${
+                      promo.activo
+                        ? "bg-slate-800/60 border-slate-700 shadow-md"
+                        : "bg-slate-900/40 border-slate-800 opacity-60"
+                    }`}
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-700/80 text-amber-300">
+                          {promo.tag}
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            promo.activo
+                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                              : "bg-slate-800 text-slate-500"
+                          }`}
+                        >
+                          {promo.activo ? "Activa" : "Inactiva"}
+                        </span>
+                      </div>
+
+                      <h4 className="font-bold text-white text-sm line-clamp-1">{promo.titulo}</h4>
+                      <p className="text-xs text-slate-400 line-clamp-2">{promo.descripcion}</p>
+                    </div>
+
+                    <div className="pt-3 mt-3 border-t border-slate-700/60 flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => togglePromotion(promo.id)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                          promo.activo
+                            ? "bg-emerald-600/30 text-emerald-300 hover:bg-emerald-600/40"
+                            : "bg-slate-700 text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        {promo.activo ? "Desactivar" : "Activar"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          deletePromotion(promo.id);
+                          toast.info("Promoción eliminada.");
+                        }}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                        title="Eliminar promoción"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* TAB 3: INFORMACIÓN COMERCIAL                            */}
           {/* ======================================================== */}
           {activeTab === "comercial" && (
-            <div className="space-y-4">
-              <div>
-                <h3 className="font-bold text-white text-base">Datos Comerciales y Canales</h3>
+            <div className="space-y-6">
+              <div className="pb-3 border-b border-slate-800">
+                <h3 className="font-bold text-white text-base">Datos Comerciales y Canales de Pago</h3>
                 <p className="text-xs text-slate-400">
                   Modifica los números y nombres que se muestran a los abonados en todo el portal
                 </p>
               </div>
 
-              <div className="space-y-3.5 bg-slate-800/40 p-5 rounded-2xl border border-slate-800">
-                <div>
-                  <label className="text-xs font-semibold text-slate-300 block mb-1">
-                    Nombre Visible de la Empresa
-                  </label>
-                  <input
-                    type="text"
-                    value={companyName}
-                    onChange={(e) => setCompanyName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs sm:text-sm font-medium"
-                  />
+              <div className="p-6 rounded-2xl bg-slate-800/40 border border-slate-700/60 space-y-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+                      Nombre Visible de la Empresa
+                    </label>
+                    <input
+                      type="text"
+                      value={companyName}
+                      onChange={(e) => setCompanyName(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-slate-300 block mb-1.5 flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5 text-emerald-400" />
+                      WhatsApp de Soporte y Cobranzas
+                    </label>
+                    <input
+                      type="text"
+                      value={supportPhone}
+                      onChange={(e) => setSupportPhone(e.target.value)}
+                      placeholder="3185577157"
+                      className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-slate-300 block mb-1.5 flex items-center gap-1.5">
+                      <CreditCard className="w-3.5 h-3.5 text-pink-400" />
+                      Número Nequi / Llave Bre-B
+                    </label>
+                    <input
+                      type="text"
+                      value={nequiNumber}
+                      onChange={(e) => setNequiNumber(e.target.value)}
+                      placeholder="311 276 0959"
+                      className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+                      Titular de la Cuenta Nequi
+                    </label>
+                    <input
+                      type="text"
+                      value={accountHolder}
+                      onChange={(e) => setAccountHolder(e.target.value)}
+                      placeholder="Orlando Aponte"
+                      className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-slate-300 block mb-1">
-                    Número de WhatsApp para Soporte (sin espacios ni símbolos)
-                  </label>
-                  <input
-                    type="text"
-                    value={supportPhone}
-                    onChange={(e) => setSupportPhone(e.target.value)}
-                    placeholder="3185577157"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs sm:text-sm font-sans font-semibold tracking-tight tabular-nums"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-300 block mb-1">
-                    Número de Cuenta Nequi / Bre-B para Pagos
-                  </label>
-                  <input
-                    type="text"
-                    value={nequiNumber}
-                    onChange={(e) => setNequiNumber(e.target.value)}
-                    placeholder="311 276 0959"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs sm:text-sm font-sans font-semibold tracking-tight tabular-nums"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-300 block mb-1">
-                    Titular de la Cuenta
-                  </label>
-                  <input
-                    type="text"
-                    value={accountHolder}
-                    onChange={(e) => setAccountHolder(e.target.value)}
-                    placeholder="Orlando Aponte"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs sm:text-sm font-medium"
-                  />
-                </div>
-
-                <div className="pt-2 flex justify-end">
+                <div className="pt-3 border-t border-slate-700/60 flex justify-end">
                   <button
                     type="button"
                     onClick={handleSaveCompany}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all cursor-pointer shadow-md shadow-amber-500/20"
+                    className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all cursor-pointer shadow-md shadow-amber-500/20"
                   >
                     <Check className="w-4 h-4" />
                     Guardar Datos Comerciales
@@ -776,25 +1007,46 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
           )}
 
           {/* ======================================================== */}
-          {/* TAB 3: AVISO GLOBAL / MANTENIMIENTO                     */}
+          {/* TAB 4: AVISO GLOBAL / MANTENIMIENTO                     */}
           {/* ======================================================== */}
           {activeTab === "alerta" && (
-            <div className="space-y-4">
-              <div>
+            <div className="space-y-6">
+              <div className="pb-3 border-b border-slate-800">
                 <h3 className="font-bold text-white text-base">Banner de Aviso Global</h3>
                 <p className="text-xs text-slate-400">
-                  Publica un aviso urgente en la cabecera para todos los abonados (cortes de fibra, mantenimientos)
+                  Publica un aviso urgente en la cabecera del portal (cortes de fibra, mantenimientos o novedades)
                 </p>
               </div>
 
-              <div className="space-y-4 bg-slate-800/40 p-5 rounded-2xl border border-slate-800">
-                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-slate-700">
+              {/* Vista Previa del Aviso */}
+              {alertEnabled && (
+                <div
+                  className={`p-4 rounded-2xl border flex items-start gap-3 animate-in fade-in ${
+                    alertType === "warning"
+                      ? "bg-amber-500/15 border-amber-500/30 text-amber-200"
+                      : "bg-sky-500/15 border-sky-500/30 text-sky-200"
+                  }`}
+                >
+                  <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-xs font-bold uppercase tracking-wider mb-0.5">
+                      Vista previa del banner superior:
+                    </p>
+                    <p className="text-xs leading-relaxed">
+                      {alertMessage || "Mensaje del aviso..."}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="p-6 rounded-2xl bg-slate-800/40 border border-slate-700/60 space-y-5">
+                <div className="flex items-center justify-between p-4 rounded-xl bg-slate-900 border border-slate-700">
                   <div>
                     <span className="text-xs font-bold text-white block">
                       Estado del Banner de Alerta
                     </span>
                     <span className="text-[11px] text-slate-400">
-                      {alertEnabled ? "Visible en la parte superior del portal" : "Desactivado"}
+                      {alertEnabled ? "Visible en la parte superior del portal para todos" : "Desactivado"}
                     </span>
                   </div>
                   <button
@@ -811,14 +1063,14 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-300 block mb-1">
+                  <label className="text-xs font-semibold text-slate-300 block mb-1.5">
                     Tipo de Aviso
                   </label>
                   <div className="flex gap-3">
                     <button
                       type="button"
                       onClick={() => setAlertType("warning")}
-                      className={`flex-1 p-2.5 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${
+                      className={`flex-1 p-3 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${
                         alertType === "warning"
                           ? "bg-amber-500/20 border-amber-500 text-amber-300"
                           : "bg-slate-900 border-slate-700 text-slate-400"
@@ -829,7 +1081,7 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                     <button
                       type="button"
                       onClick={() => setAlertType("info")}
-                      className={`flex-1 p-2.5 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${
+                      className={`flex-1 p-3 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${
                         alertType === "info"
                           ? "bg-sky-500/20 border-sky-500 text-sky-300"
                           : "bg-slate-900 border-slate-700 text-slate-400"
@@ -841,7 +1093,7 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-300 block mb-1">
+                  <label className="text-xs font-semibold text-slate-300 block mb-1.5">
                     Mensaje del Aviso
                   </label>
                   <textarea
@@ -849,15 +1101,15 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                     value={alertMessage}
                     onChange={(e) => setAlertMessage(e.target.value)}
                     placeholder="Ej: Mantenimiento preventivo en red de fibra óptica este jueves de 2:00 AM a 4:00 AM..."
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs sm:text-sm resize-none"
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs sm:text-sm resize-none focus:outline-none focus:ring-2 focus:ring-amber-400"
                   />
                 </div>
 
-                <div className="pt-2 flex justify-end">
+                <div className="pt-3 border-t border-slate-700/60 flex justify-end">
                   <button
                     type="button"
                     onClick={handleSaveAlert}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all cursor-pointer shadow-md shadow-amber-500/20"
+                    className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all cursor-pointer shadow-md shadow-amber-500/20"
                   >
                     <Check className="w-4 h-4" />
                     Guardar Aviso
@@ -866,33 +1118,30 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
               </div>
             </div>
           )}
+
         </div>
 
-        {/* Footer sticky */}
-        <div className="flex items-center justify-between px-6 py-3.5 border-t border-slate-800 bg-slate-950/70 text-xs">
+        {/* ─── FOOTER STICKY ─────────────────────────────────────────────────── */}
+        <div className="flex items-center justify-between px-6 sm:px-8 py-3.5 border-t border-slate-800/90 bg-slate-950/80 text-xs">
           <button
             type="button"
-            onClick={() => {
-              if (confirm("¿Deseas restablecer toda la configuración a los valores por defecto?")) {
-                resetToDefaults();
-                toast.info("Configuración restablecida.");
+            onClick={async () => {
+              if (confirm("¿Deseas restablecer toda la configuración en el servidor a los valores por defecto?")) {
+                await resetToDefaults();
+                toast.info("Configuración del servidor restablecida.");
                 onClose();
               }
             }}
-            className="inline-flex items-center gap-1.5 text-slate-500 hover:text-slate-300"
+            className="inline-flex items-center gap-1.5 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            Restablecer Valores Iniciales
+            <span>Restablecer Valores Iniciales</span>
           </button>
 
           <button
             type="button"
-            onClick={() => {
-              handleSaveCompany();
-              handleSaveAlert();
-              onClose();
-            }}
-            className="px-5 py-2 rounded-xl font-bold bg-white text-slate-950 hover:bg-slate-100 transition-all cursor-pointer"
+            onClick={onClose}
+            className="px-6 py-2.5 rounded-xl font-bold bg-white text-slate-950 hover:bg-slate-200 transition-all cursor-pointer shadow-sm"
           >
             Cerrar Panel
           </button>
