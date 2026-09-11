@@ -47,7 +47,7 @@ export function SpeedTestModal({ isOpen, onClose }: SpeedTestModalProps) {
         onClick={onClose}
       >
         <div
-          className="relative w-full max-w-lg max-h-[92dvh] flex flex-col rounded-2xl bg-slate-900 border border-slate-800 overflow-hidden shadow-2xl shadow-cyan-950/50 text-white animate-in zoom-in-95 duration-200"
+          className="relative w-full max-w-lg sm:max-w-xl md:max-w-[760px] max-h-[92dvh] flex flex-col rounded-2xl bg-slate-900 border border-slate-800 overflow-hidden shadow-2xl shadow-cyan-950/50 text-white animate-in zoom-in-95 duration-200"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Línea reflectiva superior */}
@@ -82,10 +82,10 @@ export function SpeedTestModal({ isOpen, onClose }: SpeedTestModalProps) {
 
           {/* ─── CUERPO DEL MODAL (IFRAME SPEEDTEST ADAPTADO A MÓVIL) ──────── */}
           <div className="relative flex-1 p-2 sm:p-4 bg-slate-950 flex flex-col items-center justify-center overflow-hidden">
-            {/* Contenedor visible h-[360px] sm:h-[450px] */}
-            <div className="relative w-full h-[360px] sm:h-[450px] overflow-hidden rounded-xl bg-[#074057] border border-slate-800 shadow-inner flex items-start justify-center pt-1 sm:pt-2">
+            {/* Contenedor visible */}
+            <div className="relative w-full h-[360px] sm:h-[460px] overflow-hidden rounded-xl bg-[#032035] flex justify-center">
               {isLoadingIframe && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#074057] text-slate-300 space-y-3 z-10">
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#032035] text-slate-300 space-y-3 z-10 pointer-events-none">
                   <div className="w-9 h-9 rounded-full border-2 border-cyan-400/20 border-t-cyan-400 animate-spin" />
                   <p className="text-xs font-semibold tracking-wide text-cyan-200">
                     Cargando medidor de velocidad...
@@ -93,18 +93,15 @@ export function SpeedTestModal({ isOpen, onClose }: SpeedTestModalProps) {
                 </div>
               )}
 
-              {/* Contenedor escalado para centrar los 4 tacómetros y botón Iniciar */}
-              <div className="w-[640px] h-[615px] shrink-0 origin-top transform scale-[0.58] min-[400px]:scale-[0.62] sm:scale-[0.74] flex items-center justify-center pointer-events-auto">
-                <iframe
-                  src={SPEED_TEST_URL}
-                  title="Test de Velocidad Azteca Comunicaciones / Aponte Plus"
-                  className="w-full h-full border-0"
-                  scrolling="no"
-                  allow="geolocation; microphone; camera"
-                  loading="lazy"
-                  onLoad={() => setIsLoadingIframe(false)}
-                />
-              </div>
+              <iframe
+                src={SPEED_TEST_URL}
+                title="Test de Velocidad Azteca Comunicaciones / Aponte Plus"
+                className="absolute w-[720px] h-[720px] max-w-none origin-top top-[-115px] sm:top-[-170px] scale-[0.46] min-[390px]:scale-[0.50] sm:scale-[0.75] md:scale-100 border-0"
+                scrolling="no"
+                allow="geolocation; microphone; camera"
+                loading="lazy"
+                onLoad={() => setIsLoadingIframe(false)}
+              />
             </div>
           </div>
 
