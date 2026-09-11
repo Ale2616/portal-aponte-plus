@@ -10,6 +10,7 @@ import {
   HomeAdBanner,
   DEFAULT_CONFIG,
 } from "@/types/config";
+import { isDefaultImageList } from "@/lib/image-compression";
 
 export type { PortalConfig, CompanyInfo, PromotionItem, GlobalAlert, HomeAdBanner };
 
@@ -22,16 +23,37 @@ interface ConfigContextType {
   deletePromotion: (id: string) => Promise<void>;
   togglePromotion: (id: string) => Promise<void>;
   updateGlobalAlert: (alert: Partial<GlobalAlert>) => Promise<void>;
-  updateHomeAdBanner: (banner: Partial<HomeAdBanner>) => Promise<void>;
+  updateHomeAdBanner: (banner: Partial<HomeAdBanner>) => Promise<boolean>;
   saveAllConfig: (newConfig: PortalConfig) => Promise<void>;
   resetToDefaults: () => Promise<void>;
   refreshConfig: () => Promise<void>;
+  setLocalConfig: (newConfig: PortalConfig) => void;
 }
 
 const ConfigContext = createContext<ConfigContextType | undefined>(undefined);
 
 export function ConfigProvider({ children }: { children: React.ReactNode }) {
-  const [config, setConfig] = useState<PortalConfig>(DEFAULT_CONFIG);
+  const [config, setConfig] = useState<PortalConfig>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem("portal_admin_banner_images_cache");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0 && !isDefaultImageList(parsed)) {
+            return {
+              ...DEFAULT_CONFIG,
+              homeAdBanner: {
+                ...DEFAULT_CONFIG.homeAdBanner,
+                imageUrl: parsed[0],
+                imageUrls: parsed,
+              },
+            };
+          }
+        }
+      } catch {}
+    }
+    return DEFAULT_CONFIG;
+  });
   const [isLoading, setIsLoading] = useState(true);
 
   // ─── Carga de Configuración Global desde el Servidor (SIN localStorage) ───────
@@ -45,7 +67,24 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.config) {
-          setConfig(data.config);
+          setConfig((prev) => {
+            const prevImgs = prev.homeAdBanner?.imageUrls || [];
+            const serverImgs = data.config.homeAdBanner?.imageUrls || [];
+
+            // Si el estado cliente actual ya tiene imágenes personalizadas cargadas
+            // y la respuesta del servidor devuelve las 3 imágenes demo por defecto, preservar las personalizadas
+            if (prevImgs.length > 0 && !isDefaultImageList(prevImgs) && isDefaultImageList(serverImgs)) {
+              return {
+                ...data.config,
+                homeAdBanner: {
+                  ...data.config.homeAdBanner,
+                  imageUrl: prevImgs[0],
+                  imageUrls: prevImgs,
+                },
+              };
+            }
+            return data.config;
+          });
         }
       }
     } catch (err) {
@@ -102,8 +141,7 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
       toast.error("Error al sincronizar con el servidor", {
         description: err.message,
       });
-      // Revertir recargando la configuración del servidor
-      void fetchServerConfig();
+      // Importante: No sobreescribir inmediatamente el estado local del usuario con fetchServerConfig()
       return false;
     }
   };
@@ -168,7 +206,7 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
     await persistToServer(updated);
   };
 
-  const updateHomeAdBanner = async (banner: Partial<HomeAdBanner>) => {
+  const updateHomeAdBanner = async (banner: Partial<HomeAdBanner>): Promise<boolean> => {
     const updated: PortalConfig = {
       ...config,
       homeAdBanner: {
@@ -176,7 +214,11 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
         ...banner,
       },
     };
-    await persistToServer(updated);
+    return await persistToServer(updated);
+  };
+
+  const setLocalConfig = (newConfig: PortalConfig) => {
+    setConfig(newConfig);
   };
 
   const saveAllConfig = async (newConfig: PortalConfig) => {
@@ -202,6 +244,7 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
         saveAllConfig,
         resetToDefaults,
         refreshConfig: fetchServerConfig,
+        setLocalConfig,
       }}
     >
       {children}

@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useConfig, PromotionItem } from "@/context/ConfigContext";
 import { HomeAdCarousel } from "./HomeAdCarousel";
+import { compressImageToDataUrl, isDefaultImageList } from "@/lib/image-compression";
 import {
   Sliders,
   Sparkles,
@@ -40,6 +42,7 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
     updateGlobalAlert,
     updateHomeAdBanner,
     resetToDefaults,
+    setLocalConfig,
   } = useConfig();
 
   const [activeTab, setActiveTab] = useState<"banner" | "promos" | "comercial" | "alerta">("banner");
@@ -57,11 +60,16 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
 
   // Estados locales para Banner Publicitario de Inicio (Hasta 5 imágenes)
   const [bannerEnabled, setBannerEnabled] = useState(config.homeAdBanner?.enabled ?? true);
-  const [bannerImageUrls, setBannerImageUrls] = useState<string[]>(
-    Array.isArray(config.homeAdBanner?.imageUrls) && config.homeAdBanner.imageUrls.length > 0
-      ? config.homeAdBanner.imageUrls
-      : [config.homeAdBanner?.imageUrl || "/banner-promo-fibra.jpg"]
-  );
+  const [bannerImageUrls, setBannerImageUrls] = useState<string[]>(() => {
+    const configImgs = config.homeAdBanner?.imageUrls;
+    if (Array.isArray(configImgs)) {
+      return configImgs.slice(0, 5);
+    }
+    if (config.homeAdBanner?.imageUrl) {
+      return [config.homeAdBanner.imageUrl];
+    }
+    return [];
+  });
   const [newImageUrlInput, setNewImageUrlInput] = useState("");
   const [bannerTitulo, setBannerTitulo] = useState(
     config.homeAdBanner?.titulo ?? "¡Pásate a Fibra Óptica con Alta Velocidad!"
@@ -78,9 +86,19 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
       "Hola, vi la promoción en el portal y deseo más información sobre el servicio de internet"
   );
 
-  // Sincronizar estados locales cuando config cambia o se abre el modal
+  const wasOpenRef = useRef(false);
+  const hasUserModifiedBannerRef = useRef(false);
+  const [isCompressingImage, setIsCompressingImage] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
-    if (isOpen) {
+    setMounted(true);
+  }, []);
+
+  // Sincronizar estados locales ÚNICAMENTE cuando el modal se abre (transición de cerrado a abierto)
+  // Se ignora config en la dependencia para evitar sobreescrituras por sondeos o refetch en segundo plano
+  useEffect(() => {
+    if (isOpen && !wasOpenRef.current) {
       setCompanyName(config.companyInfo.companyName);
       setSupportPhone(config.companyInfo.supportPhone);
       setNequiNumber(config.companyInfo.nequiNumber);
@@ -91,60 +109,135 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
 
       if (config.homeAdBanner) {
         setBannerEnabled(config.homeAdBanner.enabled);
-        const currentImgs =
-          Array.isArray(config.homeAdBanner.imageUrls) && config.homeAdBanner.imageUrls.length > 0
-            ? config.homeAdBanner.imageUrls
-            : [config.homeAdBanner.imageUrl || "/banner-promo-fibra.jpg"];
-        setBannerImageUrls(currentImgs);
         setBannerTitulo(config.homeAdBanner.titulo);
         setBannerDescripcion(config.homeAdBanner.descripcion);
         setBannerBotonTexto(config.homeAdBanner.botonTexto);
         setBannerWhatsappMensaje(config.homeAdBanner.whatsappMensaje);
+
+        if (Array.isArray(config.homeAdBanner.imageUrls)) {
+          setBannerImageUrls(config.homeAdBanner.imageUrls.slice(0, 5));
+        } else if (config.homeAdBanner.imageUrl) {
+          setBannerImageUrls([config.homeAdBanner.imageUrl]);
+        } else {
+          setBannerImageUrls([]);
+        }
       }
     }
-  }, [isOpen, config]);
 
-  // Manejo de carga de archivos locales a base64
-  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 3 * 1024 * 1024) {
-      toast.error("La imagen no debe superar los 3 MB.");
-      return;
-    }
-    if (bannerImageUrls.length >= 5) {
+    wasOpenRef.current = isOpen;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  // Manejo de carga de archivos locales con compresión previa en Canvas (máx 1080px, calidad 0.75 WebP/JPEG)
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const availableSlots = 5 - bannerImageUrls.length;
+    if (availableSlots <= 0) {
       toast.warning("Límite alcanzado: máximo 5 imágenes para el carrusel publicitario.");
+      e.target.value = "";
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = reader.result as string;
-      setBannerImageUrls((prev) => [...prev, base64].slice(0, 5));
-      toast.success(`Imagen añadida (${bannerImageUrls.length + 1}/5).`);
+    const filesToProcess = files.slice(0, availableSlots);
+    setIsCompressingImage(true);
+    const toastId = toast.loading(
+      filesToProcess.length === 1
+        ? "Optimizando y comprimiendo imagen con Canvas..."
+        : `Optimizando y comprimiendo ${filesToProcess.length} imágenes...`
+    );
+
+    try {
+      const compressedList: string[] = [];
+      for (const file of filesToProcess) {
+        const compressedBase64 = await compressImageToDataUrl(file, {
+          maxWidth: 1080,
+          quality: 0.75,
+        });
+        compressedList.push(compressedBase64);
+      }
+
+      setBannerImageUrls((prev) => {
+        const next = [...prev, ...compressedList].slice(0, 5);
+        hasUserModifiedBannerRef.current = true;
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.setItem("portal_admin_banner_images_cache", JSON.stringify(next));
+          } catch {}
+        }
+        return next;
+      });
+
+      toast.success(
+        filesToProcess.length === 1
+          ? `Imagen optimizada y añadida (${Math.min(bannerImageUrls.length + 1, 5)}/5).`
+          : `¡${filesToProcess.length} imágenes optimizadas y añadidas! (${Math.min(
+              bannerImageUrls.length + filesToProcess.length,
+              5
+            )}/5)`,
+        {
+          id: toastId,
+          description: "Redimensionada a máx 1080px (calidad 0.75) para evitar error 413 de Vercel.",
+        }
+      );
+    } catch (err: any) {
+      console.error("[Image Compression Error]:", err);
+      toast.error("Error al procesar la imagen", {
+        id: toastId,
+        description: err.message || "Verifica que el archivo sea una imagen válida.",
+      });
+    } finally {
+      setIsCompressingImage(false);
       e.target.value = ""; // Limpiar input file
-    };
-    reader.readAsDataURL(file);
+    }
   };
 
-  const handleAddImageUrl = () => {
+  const handleAddImageUrl = async () => {
     const trimmed = newImageUrlInput.trim();
     if (!trimmed) return;
     if (bannerImageUrls.length >= 5) {
       toast.warning("Máximo 5 imágenes permitidas en el carrusel.");
       return;
     }
-    setBannerImageUrls((prev) => [...prev, trimmed].slice(0, 5));
-    setNewImageUrlInput("");
-    toast.success(`Imagen añadida al carrusel (${bannerImageUrls.length + 1}/5).`);
+
+    try {
+      // Si el usuario ingresó un Base64 largo directamente, comprimirlo con Canvas
+      const finalUrl = trimmed.startsWith("data:image/")
+        ? await compressImageToDataUrl(trimmed, { maxWidth: 1080, quality: 0.75 })
+        : trimmed;
+
+      setBannerImageUrls((prev) => {
+        const next = [...prev, finalUrl].slice(0, 5);
+        hasUserModifiedBannerRef.current = true;
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.setItem("portal_admin_banner_images_cache", JSON.stringify(next));
+          } catch {}
+        }
+        return next;
+      });
+      setNewImageUrlInput("");
+      toast.success(`Imagen añadida al carrusel (${bannerImageUrls.length + 1}/5).`);
+    } catch (err: any) {
+      toast.error("No se pudo añadir la imagen", { description: err.message });
+    }
   };
 
   const handleRemoveImage = (indexToRemove: number) => {
-    if (bannerImageUrls.length <= 1) {
-      toast.info("Debe haber al menos 1 imagen en el banner.");
-      return;
-    }
-    setBannerImageUrls((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+    setBannerImageUrls((prev) => {
+      const next = prev.filter((_, idx) => idx !== indexToRemove);
+      hasUserModifiedBannerRef.current = true;
+      if (next.length === 0) {
+        setBannerEnabled(false);
+      }
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("portal_admin_banner_images_cache", JSON.stringify(next));
+        } catch {}
+      }
+      return next;
+    });
     toast.info("Imagen retirada del carrusel.");
   };
 
@@ -154,6 +247,12 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
       const copy = [...prev];
       const selected = copy.splice(index, 1)[0];
       copy.unshift(selected);
+      hasUserModifiedBannerRef.current = true;
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("portal_admin_banner_images_cache", JSON.stringify(copy));
+        } catch {}
+      }
       return copy;
     });
     toast.success("Imagen establecida como principal (primera diapositiva).");
@@ -169,7 +268,30 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
       "Hola, vi la promoción en el portal y deseo más información sobre el servicio de internet";
     const waMsg = bannerWhatsappMensaje.trim() || defaultMsg;
     const linkWhatsapp = `https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(waMsg)}`;
-    const finalImgs = bannerImageUrls.length > 0 ? bannerImageUrls : ["/banner-promo-fibra.jpg"];
+    
+    // Validar y asegurar compresión Canvas previa (máx 1080px, calidad 0.75) para todas las imágenes Base64
+    const validImgs = bannerImageUrls.filter(Boolean);
+    const finalImgs: string[] = [];
+
+    for (const img of validImgs) {
+      if (img.startsWith("data:image/") && img.length > 120000) {
+        try {
+          const comp = await compressImageToDataUrl(img, { maxWidth: 1080, quality: 0.75 });
+          finalImgs.push(comp);
+        } catch {
+          finalImgs.push(img);
+        }
+      } else {
+        finalImgs.push(img);
+      }
+    }
+
+    // Auto-desactivar banner si el arreglo queda vacío
+    const isAutoDisabled = finalImgs.length === 0;
+    const effectiveEnabled = isAutoDisabled ? false : bannerEnabled;
+    if (isAutoDisabled) {
+      setBannerEnabled(false);
+    }
 
     try {
       // Guardar directamente en el endpoint unificado del servidor
@@ -182,8 +304,8 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
           pin: "1130",
           config: {
             homeAdBanner: {
-              enabled: bannerEnabled,
-              imageUrl: finalImgs[0],
+              enabled: effectiveEnabled,
+              imageUrl: finalImgs[0] || "",
               imageUrls: finalImgs,
               titulo: bannerTitulo.trim() || "¡Pásate a Fibra Óptica con Alta Velocidad!",
               descripcion:
@@ -197,29 +319,44 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Error al persistir la configuración en el servidor");
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        if (res.status === 413) {
+          throw new Error("El tamaño total de las imágenes supera el límite de Vercel (Error 413).");
+        }
       }
 
-      await updateHomeAdBanner({
-        enabled: bannerEnabled,
-        imageUrl: finalImgs[0],
-        imageUrls: finalImgs,
-        titulo: bannerTitulo.trim() || "¡Pásate a Fibra Óptica con Alta Velocidad!",
-        descripcion:
-          bannerDescripcion.trim() ||
-          "Disfruta de la mejor conexión de la región con 100% fibra óptica dedicada.",
-        botonTexto: bannerBotonTexto.trim() || "📲 Preguntar por WhatsApp",
-        whatsappMensaje: waMsg,
-        linkWhatsapp,
-      });
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || `Error (${res.status}): No se pudo guardar la configuración.`);
+      }
 
-      toast.success("¡Carrusel publicitario guardado en el servidor!", {
-        description: `Sincronizadas ${finalImgs.length} imágenes en la base de datos global.`,
-      });
+      // Sincronizar contexto localmente con la configuración guardada por el servidor
+      if (data.config) {
+        setLocalConfig(data.config);
+      }
+
+      hasUserModifiedBannerRef.current = false;
+      setBannerImageUrls(finalImgs);
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("portal_admin_banner_images_cache", JSON.stringify(finalImgs));
+        } catch {}
+      }
+
+      toast.success(
+        isAutoDisabled
+          ? "Banner guardado sin imágenes y auto-desactivado del portal."
+          : `¡Carrusel publicitario guardado! (${finalImgs.length}/5 imágenes activas).`,
+        {
+          description: isAutoDisabled
+            ? "El banner no ocupará espacio ni se mostrará en el portal."
+            : "Sincronizado globalmente en el servidor para todos los abonados.",
+        }
+      );
     } catch (err: any) {
-      console.error(err);
+      console.error("[handleSaveBanner Error]:", err);
       toast.error("Error al guardar en el servidor", {
         description: err.message || "No se pudo sincronizar la promoción.",
       });
@@ -249,12 +386,9 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error);
 
-      await updateCompanyInfo({
-        companyName: companyName.trim() || "Internet Aponte Plus",
-        supportPhone: supportPhone.trim() || "3185577157",
-        nequiNumber: nequiNumber.trim() || "311 276 0959",
-        accountHolder: accountHolder.trim() || "Orlando Aponte",
-      });
+      if (data.config) {
+        setLocalConfig(data.config);
+      }
       toast.success("Datos comerciales guardados globalmente en el servidor.");
     } catch (err: any) {
       toast.error("Error al guardar datos comerciales", { description: err.message });
@@ -281,11 +415,9 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error);
 
-      await updateGlobalAlert({
-        enabled: alertEnabled,
-        message: alertMessage.trim() || "Aviso de mantenimiento programado.",
-        type: alertType,
-      });
+      if (data.config) {
+        setLocalConfig(data.config);
+      }
       toast.success(
         alertEnabled
           ? "Aviso publicado globalmente en el servidor para todos los clientes."
@@ -332,9 +464,9 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
     toast.success("Nueva promoción guardada en el servidor.");
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 md:p-6 bg-slate-950/85 backdrop-blur-xl animate-in fade-in duration-200">
       <div
         className="relative w-full max-w-5xl h-[92vh] max-h-[860px] flex flex-col rounded-[2rem] bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-slate-700/80 shadow-[0_25px_70px_rgba(0,0,0,0.7)] text-slate-100 overflow-hidden"
@@ -490,14 +622,25 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                   </div>
 
                   {/* Render del Carrusel Real */}
-                  <HomeAdCarousel
-                    images={bannerImageUrls}
-                    titulo={bannerTitulo}
-                    descripcion={bannerDescripcion}
-                    botonTexto={bannerBotonTexto}
-                    whatsappUrl="#"
-                    autoPlayInterval={4500}
-                  />
+                  {/* Render del Carrusel Real o Estado Vacío */}
+                  {bannerImageUrls.length > 0 ? (
+                    <HomeAdCarousel
+                      images={bannerImageUrls}
+                      titulo={bannerTitulo}
+                      descripcion={bannerDescripcion}
+                      botonTexto={bannerBotonTexto}
+                      whatsappUrl="#"
+                      autoPlayInterval={4500}
+                    />
+                  ) : (
+                    <div className="w-full aspect-[16/9] max-h-[360px] bg-slate-950/90 border-2 border-dashed border-slate-700/80 rounded-2xl flex flex-col items-center justify-center p-6 text-center text-slate-400 space-y-2">
+                      <ImageIcon className="w-8 h-8 text-slate-600" />
+                      <p className="text-xs font-bold text-slate-300">0/5 Imágenes en el Banner</p>
+                      <p className="text-[11px] text-slate-500 max-w-xs">
+                        El banner está auto-desactivado y no ocupará espacio en el portal público. Sube una imagen para activarlo.
+                      </p>
+                    </div>
+                  )}
 
                   <p className="text-[11px] text-slate-400 text-center px-2">
                     💡 Puedes arrastrar con el mouse o deslizar con el dedo en móviles para probar el Swipe.
@@ -526,16 +669,13 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                       {bannerImageUrls.map((imgSrc, idx) => (
                         <div
                           key={idx}
-                          className="relative group rounded-xl overflow-hidden border border-slate-700 bg-slate-900 aspect-[4/3] flex items-center justify-center"
+                          className="relative group rounded-xl overflow-hidden border border-slate-700 bg-slate-950 aspect-[16/9] flex items-center justify-center"
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={imgSrc}
                             alt={`Miniatura ${idx + 1}`}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = "/banner-promo-fibra.jpg";
-                            }}
+                            className="w-full h-full object-contain p-1"
                           />
 
                           {/* Badge de Posición / Principal */}
@@ -578,13 +718,27 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
 
                       {/* Botón de Carga / Añadir si hay < 5 */}
                       {bannerImageUrls.length < 5 && (
-                        <label className="border-2 border-dashed border-slate-700 hover:border-amber-400/60 rounded-xl flex flex-col items-center justify-center p-3 text-center cursor-pointer transition-colors bg-slate-900/40 hover:bg-slate-900/80 aspect-[4/3]">
-                          <Upload className="w-5 h-5 text-amber-400 mb-1" />
-                          <span className="text-[11px] font-bold text-slate-200">Añadir Foto</span>
-                          <span className="text-[9px] text-slate-400">Hasta 3 MB</span>
+                        <label
+                          className={`border-2 border-dashed border-slate-700 hover:border-amber-400/60 rounded-xl flex flex-col items-center justify-center p-3 text-center cursor-pointer transition-colors bg-slate-900/40 hover:bg-slate-900/80 aspect-[16/9] ${
+                            isCompressingImage ? "opacity-60 pointer-events-none" : ""
+                          }`}
+                        >
+                          {isCompressingImage ? (
+                            <Loader2 className="w-5 h-5 text-amber-400 mb-1 animate-spin" />
+                          ) : (
+                            <Upload className="w-5 h-5 text-amber-400 mb-1" />
+                          )}
+                          <span className="text-[11px] font-bold text-slate-200">
+                            {isCompressingImage ? "Comprimiendo..." : "Añadir Foto(s)"}
+                          </span>
+                          <span className="text-[9px] text-slate-400">
+                            Canvas 1080px (WebP)
+                          </span>
                           <input
                             type="file"
                             accept="image/*"
+                            multiple
+                            disabled={isCompressingImage}
                             onChange={handleImageFileChange}
                             className="hidden"
                           />
@@ -1147,6 +1301,7 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

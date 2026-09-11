@@ -92,9 +92,9 @@ export const DEFAULT_CONFIG: PortalConfig = {
     type: "warning",
   },
   homeAdBanner: {
-    enabled: true,
-    imageUrl: "/banner-promo-fibra.jpg",
-    imageUrls: ["/banner-promo-fibra.jpg"],
+    enabled: false,
+    imageUrl: "",
+    imageUrls: [],
     titulo: "¡Pásate a Fibra Óptica con Alta Velocidad!",
     descripcion:
       "Disfruta de la mejor conexión de la región con 100% fibra óptica dedicada y ultra velocidad.",

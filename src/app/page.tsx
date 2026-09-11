@@ -18,6 +18,9 @@ import { toast } from "sonner";
 import { DirectPaymentCard } from "@/components/DirectPaymentCard";
 import { PromoCarousel } from "@/components/PromoCarousel";
 import { NetworkUsageCard } from "@/components/NetworkUsageCard";
+import { SecretPinModal } from "@/components/SecretPinModal";
+import { AdminControlModal } from "@/components/AdminControlModal";
+import { SpeedTestModal } from "@/components/SpeedTestModal";
 import { Loader2, CheckCircle2 } from "lucide-react";
 
 function PortalContent() {
@@ -35,8 +38,19 @@ function PortalContent() {
   const [paymentInitialInvoiceId, setPaymentInitialInvoiceId] = useState<string | undefined>(undefined);
   const [isBankAccountsOpen, setIsBankAccountsOpen] = useState(false);
   const [isFaqOpen, setIsFaqOpen] = useState(false);
+  const [isSpeedTestOpen, setIsSpeedTestOpen] = useState(false);
   const [selectedInvoiceForPdf, setSelectedInvoiceForPdf] = useState<Invoice | null>(null);
   const [paymentReportSuccessData, setPaymentReportSuccessData] = useState<PaymentReportResult | null>(null);
+
+  // Puerta Secreta: Modal de PIN y Panel Administrativo
+  const [showAdminPinModal, setShowAdminPinModal] = useState(false);
+  const [showAdminControlModal, setShowAdminControlModal] = useState(false);
+
+  useEffect(() => {
+    const handleOpenSecret = () => setShowAdminPinModal(true);
+    window.addEventListener("open-admin-secret-pin", handleOpenSecret);
+    return () => window.removeEventListener("open-admin-secret-pin", handleOpenSecret);
+  }, []);
 
   // Buscar cliente por documento de identidad
   const handleSearch = useCallback(
@@ -171,40 +185,57 @@ function PortalContent() {
   const pendingInvoices = invoices.filter((i) => i.estado !== "pagada");
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50/50 dark:bg-[#090d16] text-slate-900 dark:text-slate-100 transition-colors">
+    <div className="min-h-[100dvh] w-full overflow-x-hidden flex flex-col justify-between bg-gradient-to-b from-slate-50 via-sky-50/20 to-slate-100 dark:from-[#060913] dark:via-[#081020] dark:to-[#05070f] text-slate-900 dark:text-slate-100 transition-colors relative">
+      {/* Esferas de iluminación ambiental difusa (Dark tech / Telecomunicaciones fibra óptica) */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden z-0">
+        {/* Esfera superior izquierda: Azul eléctrico (#0284c7) */}
+        <div className="absolute -top-36 -left-36 w-96 h-96 sm:w-[560px] sm:h-[560px] rounded-full bg-[#0284c7]/18 dark:bg-[#0284c7]/15 blur-[120px] animate-pulse" />
+        {/* Esfera central derecha: Cian vibrante (#06b6d4) */}
+        <div className="absolute top-1/4 -right-36 w-80 h-80 sm:w-[500px] sm:h-[500px] rounded-full bg-cyan-500/18 dark:bg-cyan-500/12 blur-[100px]" />
+        {/* Esfera inferior: Verde esmeralda suave (#10b981) */}
+        <div className="absolute -bottom-28 left-1/3 w-80 h-80 sm:w-[520px] sm:h-[520px] rounded-full bg-emerald-500/12 dark:bg-emerald-500/8 blur-[120px]" />
+      </div>
+
       {/* Aviso Global de Mantenimiento (Controlado desde Panel Admin) */}
-      <GlobalAlertBanner />
+      <div className="relative z-10">
+        <GlobalAlertBanner />
+      </div>
 
       {/* Cabecera con botón Cambiar */}
-      <Header
-        client={client}
-        onLogout={handleLogout}
-        onOpenBankAccounts={() => setIsBankAccountsOpen(true)}
-        onOpenFaq={() => setIsFaqOpen(true)}
-      />
+      <div className="relative z-10">
+        <Header
+          client={client}
+          onLogout={handleLogout}
+          onOpenBankAccounts={() => setIsBankAccountsOpen(true)}
+          onOpenFaq={() => setIsFaqOpen(true)}
+          onOpenAdminPin={() => setShowAdminPinModal(true)}
+        />
+      </div>
 
       {/* Contenido Principal */}
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-10">
+      <main className="relative z-10 flex-1 max-w-5xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-8 md:py-10 pb-24 sm:pb-12 flex flex-col items-center justify-start">
         {!client ? (
           <SearchScreen
             onSearch={handleSearch}
             isLoading={isLoading}
             error={error}
+            onOpenAdminPin={() => setShowAdminPinModal(true)}
+            onOpenSpeedTest={() => setIsSpeedTestOpen(true)}
           />
         ) : (
           <div className="space-y-8 animate-in fade-in duration-300">
             {/* Mensaje de Confirmación de Pago Exitoso */}
             {paymentReportSuccessData && (
-              <div className="rounded-3xl p-5 sm:p-6 bg-emerald-500/10 border-2 border-emerald-500/30 text-emerald-950 dark:text-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in zoom-in-95 duration-200">
+              <div className="rounded-3xl p-5 sm:p-6 bg-emerald-500/10 border border-emerald-500/30 text-emerald-950 dark:text-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg shadow-emerald-950/20 backdrop-blur-xl animate-in zoom-in-95 duration-250 ease-[cubic-bezier(0.165,0.84,0.44,1)]">
                 <div className="flex items-start gap-3.5">
                   <div className="p-2.5 rounded-2xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex-shrink-0">
                     <CheckCircle2 className="w-6 h-6" strokeWidth={2} />
                   </div>
                   <div>
-                    <h4 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                    <h4 className="text-base font-bold text-slate-900 dark:text-slate-100 tracking-tight">
                       ¡Comprobante enviado con éxito!
                     </h4>
-                    <p className="text-xs sm:text-sm text-emerald-700 dark:text-emerald-300/90 mt-0.5">
+                    <p className="text-xs sm:text-sm text-emerald-700 dark:text-emerald-300/90 mt-0.5 leading-relaxed">
                       Su pago será verificado en el sistema en un transcurso de 30 a 60 minutos. Radicado asignado:{" "}
                       <strong className="font-sans font-bold tracking-tight tabular-nums">{paymentReportSuccessData.radicado}</strong>.
                     </p>
@@ -213,7 +244,7 @@ function PortalContent() {
                 <button
                   type="button"
                   onClick={() => setPaymentReportSuccessData(null)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-all self-start sm:self-auto cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] hover:scale-[1.01] text-white shadow-md shadow-emerald-600/30 transition-all duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)] self-start sm:self-auto cursor-pointer"
                 >
                   Entendido
                 </button>
@@ -248,17 +279,18 @@ function PortalContent() {
       </main>
 
       {/* Footer */}
-      <footer className="w-full border-t border-slate-200/80 dark:border-slate-800/80 bg-white/60 dark:bg-slate-900/60 py-6 text-center text-xs text-slate-500 dark:text-slate-400 mt-auto">
+      <footer className="w-full border-t border-slate-200/60 dark:border-slate-800/70 bg-white/50 dark:bg-[#060913]/60 backdrop-blur-md py-6 text-center text-xs text-slate-500 dark:text-slate-400 mt-auto">
         <div className="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <p>
             © {new Date().getFullYear()} {branding.companyName} ({branding.legalName}). NIT: {branding.nit}
           </p>
           <p className="flex items-center gap-1.5">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
             <span>Plataforma integrada con WispHub API</span>
             <span>•</span>
             <button
               onClick={() => setIsFaqOpen(true)}
-              className="text-sky-600 dark:text-sky-400 hover:underline cursor-pointer"
+              className="text-cyan-600 dark:text-cyan-400 hover:underline cursor-pointer font-medium"
             >
               Centro de Ayuda
             </button>
@@ -301,6 +333,28 @@ function PortalContent() {
         cedula={client?.cedula}
       />
 
+      {/* Puerta Secreta: Modal de PIN Administrativo (PIN 1130) */}
+      <SecretPinModal
+        isOpen={showAdminPinModal}
+        onClose={() => setShowAdminPinModal(false)}
+        onSuccess={() => {
+          setShowAdminPinModal(false);
+          setShowAdminControlModal(true);
+        }}
+      />
+
+      {/* Modal de Panel de Control Interno */}
+      <AdminControlModal
+        isOpen={showAdminControlModal}
+        onClose={() => setShowAdminControlModal(false)}
+      />
+
+      {/* Modal Interactivo de Test de Velocidad (Red Azteca / Aponte Plus) */}
+      <SpeedTestModal
+        isOpen={isSpeedTestOpen}
+        onClose={() => setIsSpeedTestOpen(false)}
+      />
+
       {/* Botón Flotante Persistente de WhatsApp */}
       <WhatsAppFloat client={client} />
     </div>
@@ -311,7 +365,7 @@ export default function Home() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-[#090d16] text-slate-600 dark:text-slate-400 space-y-3">
+        <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-slate-50 dark:bg-[#090d16] text-slate-600 dark:text-slate-400 space-y-3">
           <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
           <p className="text-sm font-medium">Cargando portal de autogestión...</p>
         </div>

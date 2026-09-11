@@ -20,8 +20,11 @@ export function HomeAdCarousel({
   whatsappUrl,
   autoPlayInterval = 4500,
 }: HomeAdCarouselProps) {
-  // Asegurar que siempre haya al menos 1 imagen válida
-  const validImages = images && images.length > 0 ? images.filter(Boolean) : ["/banner-promo-fibra.jpg"];
+  // Si no hay imágenes válidas o el arreglo está vacío, retornar null (sin dejar espacios en blanco ni marcos vacíos)
+  const validImages = Array.isArray(images) ? images.filter(Boolean) : [];
+  if (validImages.length === 0) {
+    return null;
+  }
   const totalSlides = validImages.length;
 
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -87,15 +90,15 @@ export function HomeAdCarousel({
 
   return (
     <div
-      className="w-full max-w-md mx-auto overflow-hidden rounded-3xl border border-cyan-500/25 bg-slate-900/90 shadow-2xl shadow-cyan-950/30 transition-all select-none"
+      className="w-full max-w-md mx-auto overflow-hidden rounded-2xl sm:rounded-3xl border border-cyan-500/25 bg-slate-900/90 shadow-xl shadow-cyan-950/30 transition-all select-none"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {/* ─── CONTENEDOR DEL SLIDER DE IMÁGENES ───────────────────────────── */}
-      <div className="relative w-full overflow-hidden bg-slate-950 aspect-[4/3] sm:aspect-[16/10] max-h-[320px] flex items-center justify-center">
+      {/* ─── CONTENEDOR DEL SLIDER DE IMÁGENES (16:9 max-h-[220px] sm:max-h-[300px]) ───── */}
+      <div className="relative w-full max-w-md aspect-[16/9] max-h-[220px] sm:max-h-[300px] rounded-2xl overflow-hidden bg-slate-950 flex items-center justify-center">
         
         {/* Pista de diapositivas deslizante */}
         <div
@@ -105,17 +108,14 @@ export function HomeAdCarousel({
           {validImages.map((imgSrc, idx) => (
             <div
               key={`${imgSrc}-${idx}`}
-              className="min-w-full h-full flex items-center justify-center bg-slate-950 flex-shrink-0"
+              className="min-w-full h-full flex items-center justify-center bg-slate-950/90 flex-shrink-0"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={imgSrc}
                 alt={`Banner promocional ${idx + 1}`}
-                className="w-full h-full object-contain pointer-events-none"
+                className="w-full h-full object-contain pointer-events-none select-none"
                 loading={idx === 0 ? "eager" : "lazy"}
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = "/banner-promo-fibra.jpg";
-                }}
               />
             </div>
           ))}
@@ -211,3 +211,6 @@ export function HomeAdCarousel({
     </div>
   );
 }
+
+export const BannerCarousel = HomeAdCarousel;
+export default HomeAdCarousel;

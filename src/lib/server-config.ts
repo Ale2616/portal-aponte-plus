@@ -52,8 +52,9 @@ async function getFromRedis(): Promise<PortalConfig | null> {
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1200);
+    const timeout = setTimeout(() => controller.abort(), 3500);
 
+    // Intentar GET estándar de Upstash
     const res = await fetch(`${redis.url}/get/portal:global_config`, {
       method: "GET",
       headers: {
@@ -67,13 +68,14 @@ async function getFromRedis(): Promise<PortalConfig | null> {
     if (!res.ok) return null;
 
     const json = await res.json();
-    if (!json || !json.result) return null;
+    if (!json || json.result === null || json.result === undefined) return null;
 
     const parsed: PortalConfig =
       typeof json.result === "string" ? JSON.parse(json.result) : json.result;
 
     return parsed;
-  } catch {
+  } catch (err) {
+    console.warn("[server-config] Error al leer desde Upstash Redis:", err);
     return null;
   }
 }
@@ -84,64 +86,88 @@ async function saveToRedis(config: PortalConfig): Promise<boolean> {
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1500);
+    const timeout = setTimeout(() => controller.abort(), 5000);
 
-    const res = await fetch(`${redis.url}/set/portal:global_config`, {
+    // Formato recomendado oficial Upstash Redis REST API (Array de comando en body POST):
+    // ["SET", "portal:global_config", "<JSON_STRING>"]
+    const commandPayload = JSON.stringify([
+      "SET",
+      "portal:global_config",
+      JSON.stringify(config),
+    ]);
+
+    const res = await fetch(redis.url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${redis.token}`,
+        "Content-Type": "application/json",
+      },
+      body: commandPayload,
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+    if (res.ok) return true;
+
+    // Fallback: endpoint directo /set/portal:global_config
+    const fallbackRes = await fetch(`${redis.url}/set/portal:global_config`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${redis.token}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(config),
-      signal: controller.signal,
     });
 
-    clearTimeout(timeout);
-    return res.ok;
-  } catch {
+    return fallbackRes.ok;
+  } catch (err) {
+    console.warn("[server-config] Error al guardar en Upstash Redis:", err);
     return false;
   }
 }
 
 // ─── Persistencia en Archivo Local / tmp ────────────────────────────────────────
 
-function getConfigFilePath(): string {
-  const defaultDir = path.join(process.cwd(), "data");
-  const tmpDir = path.join(process.cwd(), ".next", "cache");
-  const fallbackTmp = "/tmp";
-
-  try {
-    if (!fs.existsSync(defaultDir)) {
-      fs.mkdirSync(defaultDir, { recursive: true });
-    }
-    return path.join(defaultDir, "portal-config.json");
-  } catch {
-    try {
-      if (!fs.existsSync(tmpDir)) {
-        fs.mkdirSync(tmpDir, { recursive: true });
-      }
-      return path.join(tmpDir, "portal-config.json");
-    } catch {
-      return path.join(fallbackTmp, "portal-config.json");
-    }
-  }
-}
+const DATA_CONFIG_PATH = path.join(process.cwd(), "data", "portal-config.json");
+const TMP_CONFIG_PATH = path.join("/tmp", "portal-config.json");
 
 function readConfigFile(): PortalConfig | null {
+  // 1. Intentar /tmp (contiene la versión más reciente en entornos serverless)
   try {
-    const file = getConfigFilePath();
-    if (fs.existsSync(file)) {
-      const content = fs.readFileSync(file, "utf-8");
-      return JSON.parse(content);
+    if (fs.existsSync(/*turbopackIgnore: true*/ TMP_CONFIG_PATH)) {
+      const content = fs.readFileSync(/*turbopackIgnore: true*/ TMP_CONFIG_PATH, "utf-8");
+      const parsed = JSON.parse(content);
+      if (parsed && typeof parsed === "object") return parsed;
     }
   } catch {}
+
+  // 2. Intentar ruta estándar de proyecto data/portal-config.json
+  try {
+    if (fs.existsSync(DATA_CONFIG_PATH)) {
+      const content = fs.readFileSync(DATA_CONFIG_PATH, "utf-8");
+      const parsed = JSON.parse(content);
+      if (parsed && typeof parsed === "object") return parsed;
+    }
+  } catch {}
+
   return null;
 }
 
 function writeConfigFile(config: PortalConfig): void {
+  const jsonString = JSON.stringify(config, null, 2);
+
+  // 1. Escribir en data/portal-config.json si el disco es editable
   try {
-    const file = getConfigFilePath();
-    fs.writeFileSync(file, JSON.stringify(config, null, 2), "utf-8");
+    const dataDir = path.join(process.cwd(), "data");
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    fs.writeFileSync(DATA_CONFIG_PATH, jsonString, "utf-8");
+  } catch {}
+
+  // 2. Replicar en /tmp/portal-config.json para Vercel Serverless
+  try {
+    fs.writeFileSync(/*turbopackIgnore: true*/ TMP_CONFIG_PATH, jsonString, "utf-8");
   } catch {}
 }
 
@@ -177,19 +203,26 @@ export async function setGlobalPortalConfig(
 ): Promise<PortalConfig> {
   const current = await getGlobalPortalConfig();
 
-  // Asegurar que homeAdBanner tenga imageUrls (hasta 5 imágenes)
+  // Asegurar que homeAdBanner tenga imageUrls (hasta 5 imágenes) y soporte array vacío
   const incomingBanner: Partial<HomeAdBanner> = newConfig.homeAdBanner ?? {};
   let finalImageUrls: string[] = [];
 
-  if (Array.isArray(incomingBanner.imageUrls) && incomingBanner.imageUrls.length > 0) {
+  if (Array.isArray(incomingBanner.imageUrls)) {
     finalImageUrls = incomingBanner.imageUrls.filter(Boolean).slice(0, 5);
   } else if (incomingBanner.imageUrl) {
     finalImageUrls = [incomingBanner.imageUrl];
-  } else if (current.homeAdBanner?.imageUrls && current.homeAdBanner.imageUrls.length > 0) {
+  } else if (current.homeAdBanner?.imageUrls) {
     finalImageUrls = current.homeAdBanner.imageUrls.slice(0, 5);
   } else {
-    finalImageUrls = [current.homeAdBanner.imageUrl || "/banner-promo-fibra.jpg"];
+    finalImageUrls = [];
   }
+
+  const isAutoDisabled = finalImageUrls.length === 0;
+  const effectiveEnabled = isAutoDisabled
+    ? false
+    : incomingBanner.enabled !== undefined
+    ? incomingBanner.enabled
+    : current.homeAdBanner?.enabled ?? true;
 
   const merged: PortalConfig = {
     companyInfo: {
@@ -206,7 +239,8 @@ export async function setGlobalPortalConfig(
     homeAdBanner: {
       ...current.homeAdBanner,
       ...incomingBanner,
-      imageUrl: finalImageUrls[0] || incomingBanner.imageUrl || current.homeAdBanner.imageUrl,
+      enabled: effectiveEnabled,
+      imageUrl: finalImageUrls[0] || "",
       imageUrls: finalImageUrls,
     },
     actualizadoEn: new Date().toISOString(),
@@ -214,7 +248,7 @@ export async function setGlobalPortalConfig(
 
   globalThis.__GLOBAL_PORTAL_CONFIG__ = merged;
   writeConfigFile(merged);
-  void saveToRedis(merged);
+  await saveToRedis(merged);
 
   return merged;
 }

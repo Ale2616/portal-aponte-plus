@@ -60,7 +60,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased min-h-screen flex flex-col overflow-x-hidden w-full max-w-full`}
+        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased min-h-[100dvh] flex flex-col overflow-x-hidden w-full max-w-full`}
       >
         <ConfigProvider>
           <Toaster

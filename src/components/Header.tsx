@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { ClientProfile } from "@/lib/types";
 import { branding } from "@/config/branding";
 import { getServiceStatusInfo } from "@/lib/utils";
@@ -16,26 +16,61 @@ interface HeaderProps {
   onLogout: () => void;
   onOpenBankAccounts: () => void;
   onOpenFaq: () => void;
+  onOpenAdminPin?: () => void;
 }
 
-export function Header({ client, onLogout, onOpenBankAccounts, onOpenFaq }: HeaderProps) {
+export function Header({
+  client,
+  onLogout,
+  onOpenBankAccounts,
+  onOpenFaq,
+  onOpenAdminPin,
+}: HeaderProps) {
   const statusInfo = client ? getServiceStatusInfo(client.estadoServicio) : null;
   const { config } = useConfig();
 
-  // Puerta Secreta: 5 clics en menos de 3 segundos
-  const [clickTimestamps, setClickTimestamps] = useState<number[]>([]);
+  // Puerta Secreta: 5 clics continuos en el logo/nombre
+  const [secretClicks, setSecretClicks] = useState(0);
+  const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
 
-  const handleSecretTrigger = () => {
-    const now = Date.now();
-    const recent = [...clickTimestamps.filter((t) => now - t < 3000), now];
-    setClickTimestamps(recent);
+  // Escuchar evento global opcional para abrir el modal del PIN
+  useEffect(() => {
+    const handleOpenSecret = () => {
+      if (onOpenAdminPin) {
+        onOpenAdminPin();
+      } else {
+        setIsPinModalOpen(true);
+      }
+    };
+    window.addEventListener("open-admin-secret-pin", handleOpenSecret);
+    return () => {
+      window.removeEventListener("open-admin-secret-pin", handleOpenSecret);
+      if (clickTimeoutRef.current) {
+        clearTimeout(clickTimeoutRef.current);
+      }
+    };
+  }, [onOpenAdminPin]);
 
-    if (recent.length >= 5) {
-      setClickTimestamps([]);
-      setIsPinModalOpen(true);
+  const handleSecretTrigger = () => {
+    const nextClicks = secretClicks + 1;
+    if (nextClicks >= 5) {
+      if (clickTimeoutRef.current) clearTimeout(clickTimeoutRef.current);
+      setSecretClicks(0);
+      if (onOpenAdminPin) {
+        onOpenAdminPin();
+      } else {
+        setIsPinModalOpen(true);
+      }
+      return;
     }
+
+    setSecretClicks(nextClicks);
+    if (clickTimeoutRef.current) clearTimeout(clickTimeoutRef.current);
+    clickTimeoutRef.current = setTimeout(() => {
+      setSecretClicks(0);
+    }, 2500);
   };
 
   const displayName = config.companyInfo.companyName || branding.companyName;
@@ -136,21 +171,24 @@ export function Header({ client, onLogout, onOpenBankAccounts, onOpenFaq }: Head
         </div>
       </header>
 
-      {/* Modal de PIN Secreto */}
-      <SecretPinModal
-        isOpen={isPinModalOpen}
-        onClose={() => setIsPinModalOpen(false)}
-        onSuccess={() => {
-          setIsPinModalOpen(false);
-          setIsAdminModalOpen(true);
-        }}
-      />
+      {/* Modales de Administración (fallback local si no se gestionan en layout superior) */}
+      {!onOpenAdminPin && (
+        <>
+          <SecretPinModal
+            isOpen={isPinModalOpen}
+            onClose={() => setIsPinModalOpen(false)}
+            onSuccess={() => {
+              setIsPinModalOpen(false);
+              setIsAdminModalOpen(true);
+            }}
+          />
 
-      {/* Modal de Panel de Control Interno */}
-      <AdminControlModal
-        isOpen={isAdminModalOpen}
-        onClose={() => setIsAdminModalOpen(false)}
-      />
+          <AdminControlModal
+            isOpen={isAdminModalOpen}
+            onClose={() => setIsAdminModalOpen(false)}
+          />
+        </>
+      )}
     </>
   );
 }
