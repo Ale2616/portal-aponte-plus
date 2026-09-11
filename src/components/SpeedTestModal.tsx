@@ -101,11 +101,11 @@ export function SpeedTestModal({ isOpen, onClose }: SpeedTestModalProps) {
                 loading="lazy"
                 onLoad={() => setIsLoadingIframe(false)}
                 className="
-                  border-0 max-w-none absolute origin-top left-0 right-0 mx-auto
-                  /* MÓVIL: ancho fijo 660px para cuadrícula 2x2, escala progresiva para ver Iniciar y los 4 medidores sin scroll */
-                  w-[660px] h-[640px] top-[-18px] scale-[0.49] min-[375px]:scale-[0.52] min-[390px]:scale-[0.55] min-[430px]:scale-[0.60]
+                  border-0 max-w-none absolute origin-top left-1/2 -translate-x-1/2
+                  /* MÓVIL: centrado absoluto perfecto al 50%, cuadrícula 2x2 con Iniciar y los 4 tacómetros visibles */
+                  w-[660px] h-[640px] top-[-12px] scale-[0.48] min-[375px]:scale-[0.51] min-[390px]:scale-[0.54] min-[430px]:scale-[0.58]
                   /* PC / TABLET: centrado completo con Iniciar y los 4 tacómetros visibles */
-                  sm:w-[700px] sm:h-[620px] sm:top-[-20px] sm:scale-[0.88] md:scale-[0.92]
+                  sm:w-[700px] sm:h-[620px] sm:top-[-15px] sm:scale-[0.88] md:scale-[0.92]
                 "
               />
             </div>
