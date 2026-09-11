@@ -9,8 +9,8 @@ interface SpeedTestModalProps {
   onClose: () => void;
 }
 
-const SPEED_TEST_URL = "https://aztecacomunicaciones.com/acerca-de-nosotros/test-de-velocidad/";
-const FULLSCREEN_TEST_URL = "https://aztecacomunicaciones.com/acerca-de-nosotros/test-de-velocidad/";
+const SPEED_TEST_URL = "https://medidor.azteca-comunicaciones.com/?notitle=1";
+const FULLSCREEN_TEST_URL = "https://medidor.azteca-comunicaciones.com/";
 
 export function SpeedTestModal({ isOpen, onClose }: SpeedTestModalProps) {
   const [mounted, setMounted] = useState(false);
@@ -43,7 +43,7 @@ export function SpeedTestModal({ isOpen, onClose }: SpeedTestModalProps) {
     <>
       {/* ─── MODAL CONTENEDOR Y BACKDROP ──────────────────────────────────────── */}
       <div
-        className="fixed inset-0 z-50 p-3 sm:p-6 flex items-center justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
+        className="fixed inset-0 z-50 p-2.5 sm:p-6 flex items-center justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
         onClick={onClose}
       >
         <div
@@ -80,12 +80,12 @@ export function SpeedTestModal({ isOpen, onClose }: SpeedTestModalProps) {
             </button>
           </div>
 
-          {/* ─── CUERPO DEL MODAL (IFRAME SPEEDTEST ADAPTADO A MÓVIL) ──────── */}
+          {/* ─── CUERPO DEL MODAL (IFRAME SPEEDTEST ADAPTADO A MÓVIL Y PC) ─── */}
           <div className="relative flex-1 p-2 sm:p-4 bg-slate-950 flex flex-col items-center justify-center overflow-hidden">
-            {/* Contenedor visible */}
-            <div className="relative w-full h-[370px] sm:h-[460px] overflow-hidden rounded-xl bg-[#032035] flex items-center justify-center">
+            {/* Contenedor visible calibrado */}
+            <div className="relative w-full h-[385px] sm:h-[530px] overflow-hidden rounded-xl bg-[#074057] flex items-center justify-center">
               {isLoadingIframe && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#032035] text-slate-300 space-y-3 z-10 pointer-events-none">
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#074057] text-slate-300 space-y-3 z-10 pointer-events-none">
                   <div className="w-9 h-9 rounded-full border-2 border-cyan-400/20 border-t-cyan-400 animate-spin" />
                   <p className="text-xs font-semibold tracking-wide text-cyan-200">
                     Cargando medidor de velocidad...
@@ -100,7 +100,13 @@ export function SpeedTestModal({ isOpen, onClose }: SpeedTestModalProps) {
                 allow="geolocation; microphone; camera"
                 loading="lazy"
                 onLoad={() => setIsLoadingIframe(false)}
-                className="border-0 max-w-none w-[660px] h-[720px] absolute top-[-60px] origin-top scale-[0.52] min-[390px]:scale-[0.56] min-[430px]:scale-[0.60] sm:w-full sm:h-[600px] sm:top-[-85px] sm:scale-100 sm:left-0"
+                className="
+                  border-0 max-w-none absolute origin-top left-0 right-0 mx-auto
+                  /* MÓVIL: ancho fijo 660px para cuadrícula 2x2, escala progresiva para ver Iniciar y los 4 medidores sin scroll */
+                  w-[660px] h-[640px] top-[-18px] scale-[0.49] min-[375px]:scale-[0.52] min-[390px]:scale-[0.55] min-[430px]:scale-[0.60]
+                  /* PC / TABLET: centrado completo con Iniciar y los 4 tacómetros visibles */
+                  sm:w-[700px] sm:h-[620px] sm:top-[-20px] sm:scale-[0.88] md:scale-[0.92]
+                "
               />
             </div>
           </div>
