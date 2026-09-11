@@ -9,8 +9,8 @@ interface SpeedTestModalProps {
   onClose: () => void;
 }
 
-const SPEED_TEST_URL = "https://medidor.azteca-comunicaciones.com/?notitle=1&embed=1";
-const FULLSCREEN_TEST_URL = "https://medidor.azteca-comunicaciones.com/";
+const SPEED_TEST_URL = "https://aztecacomunicaciones.com/acerca-de-nosotros/test-de-velocidad/";
+const FULLSCREEN_TEST_URL = "https://aztecacomunicaciones.com/acerca-de-nosotros/test-de-velocidad/";
 
 export function SpeedTestModal({ isOpen, onClose }: SpeedTestModalProps) {
   const [mounted, setMounted] = useState(false);
@@ -83,7 +83,7 @@ export function SpeedTestModal({ isOpen, onClose }: SpeedTestModalProps) {
           {/* ─── CUERPO DEL MODAL (IFRAME SPEEDTEST ADAPTADO A MÓVIL) ──────── */}
           <div className="relative flex-1 p-2 sm:p-4 bg-slate-950 flex flex-col items-center justify-center overflow-hidden">
             {/* Contenedor visible */}
-            <div className="relative w-full h-[360px] sm:h-[460px] overflow-hidden rounded-xl bg-[#032035] flex justify-center">
+            <div className="relative w-full h-[370px] sm:h-[460px] overflow-hidden rounded-xl bg-[#032035] flex items-center justify-center">
               {isLoadingIframe && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#032035] text-slate-300 space-y-3 z-10 pointer-events-none">
                   <div className="w-9 h-9 rounded-full border-2 border-cyan-400/20 border-t-cyan-400 animate-spin" />
@@ -95,12 +95,12 @@ export function SpeedTestModal({ isOpen, onClose }: SpeedTestModalProps) {
 
               <iframe
                 src={SPEED_TEST_URL}
-                title="Test de Velocidad Azteca Comunicaciones / Aponte Plus"
-                className="absolute w-[720px] h-[720px] max-w-none origin-top top-[-115px] sm:top-[-170px] scale-[0.46] min-[390px]:scale-[0.50] sm:scale-[0.75] md:scale-100 border-0"
+                title="Test de Velocidad Azteca"
                 scrolling="no"
                 allow="geolocation; microphone; camera"
                 loading="lazy"
                 onLoad={() => setIsLoadingIframe(false)}
+                className="border-0 max-w-none w-[660px] h-[720px] absolute top-[-60px] origin-top scale-[0.52] min-[390px]:scale-[0.56] min-[430px]:scale-[0.60] sm:w-full sm:h-[600px] sm:top-[-85px] sm:scale-100 sm:left-0"
               />
             </div>
           </div>
