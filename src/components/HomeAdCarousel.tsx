@@ -114,7 +114,7 @@ export function HomeAdCarousel({
               <img
                 src={imgSrc}
                 alt={`Banner promocional ${idx + 1}`}
-                className="w-full h-full object-contain pointer-events-none select-none"
+                className="w-full h-full object-cover object-center pointer-events-none select-none"
                 loading={idx === 0 ? "eager" : "lazy"}
               />
             </div>

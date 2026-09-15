@@ -79,7 +79,9 @@ export function SearchScreen({
     : `https://wa.me/${phoneWithCountry || "573185577157"}?text=${encodeURIComponent(promoWhatsappMsg)}`;
 
   const activeBannersFromGlobal = Array.isArray(globalSettings?.banners)
-    ? globalSettings.banners.filter((b) => b.active).map((b) => b.url)
+    ? globalSettings.banners
+        .filter((b) => b.active === true && b.url && b.url.trim() !== "")
+        .map((b) => b.url)
     : [];
 
   const bannerImages =

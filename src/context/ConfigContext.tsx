@@ -78,7 +78,7 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
           // Sincronizar PortalConfig compatible para el resto de la aplicación
           setConfig((prev) => {
             const activeBannerUrls = rawSettings.banners
-              .filter((b) => b.active)
+              .filter((b) => b.active === true && b.url && b.url.trim() !== "")
               .map((b) => b.url);
 
             return {
@@ -132,7 +132,7 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
     // Actualización optimista inmediata
     setGlobalSettings(newSettings);
     const activeBannerUrls = newSettings.banners
-      .filter((b) => b.active)
+      .filter((b) => b.active === true && b.url && b.url.trim() !== "")
       .map((b) => b.url);
 
     setConfig((prev) => ({

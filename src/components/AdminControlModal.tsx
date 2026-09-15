@@ -609,7 +609,7 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                           <img
                             src={item.url}
                             alt={`Miniatura ${idx + 1}`}
-                            className="w-full h-full object-contain p-1"
+                            className="w-full h-full object-cover"
                           />
 
                           {/* Badge de Posición / Principal */}
