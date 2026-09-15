@@ -172,9 +172,9 @@ export function getInvoiceStatusInfo(status: InvoiceStatus) {
       };
     case "vencida":
       return {
-        label: "Vencida",
-        color: "text-rose-400",
-        bgColor: "bg-rose-500/10 border-rose-500/30 text-rose-400",
+        label: "Pendiente",
+        color: "text-amber-400",
+        bgColor: "bg-amber-500/10 border-amber-500/30 text-amber-400",
       };
   }
 }
@@ -197,3 +197,70 @@ export function buildWhatsAppUrl(
 
   return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 }
+
+const MESES_ES = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+];
+
+/**
+ * Obtiene el mes y año de la factura en formato formal (ej. "Septiembre 2026"),
+ * resolviéndolo a partir del periodo o de la fecha de emisión/vencimiento,
+ * garantizando que NUNCA aparezca "Mes en curso".
+ */
+export function formatInvoiceMonth(
+  periodo?: string | null,
+  fechaEmision?: string | null,
+  fechaVencimiento?: string | null
+): string {
+  // 1. Si ya viene un periodo con mes válido y no es genérico "Mes en curso"
+  if (periodo && typeof periodo === "string") {
+    const trimmed = periodo.trim();
+    if (
+      trimmed &&
+      !trimmed.toLowerCase().includes("mes en curso") &&
+      trimmed.toLowerCase() !== "null" &&
+      trimmed.toLowerCase() !== "undefined"
+    ) {
+      return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+    }
+  }
+
+  // 2. Extraer el mes y año desde fechaEmision o fechaVencimiento
+  const targetDateStr = (fechaEmision || fechaVencimiento || "").trim();
+  if (targetDateStr) {
+    // Formato DD/MM/YYYY
+    if (targetDateStr.includes("/")) {
+      const parts = targetDateStr.split("/");
+      if (parts.length === 3) {
+        const monthIndex = parseInt(parts[1], 10) - 1;
+        const year = parts[2];
+        if (monthIndex >= 0 && monthIndex < 12) {
+          return `${MESES_ES[monthIndex]} ${year}`;
+        }
+      }
+    }
+
+    // Formato YYYY-MM-DD
+    if (targetDateStr.includes("-")) {
+      const parts = targetDateStr.split("-");
+      if (parts.length === 3) {
+        const year = parts[0];
+        const monthIndex = parseInt(parts[1], 10) - 1;
+        if (monthIndex >= 0 && monthIndex < 12) {
+          return `${MESES_ES[monthIndex]} ${year}`;
+        }
+      }
+    }
+
+    const d = new Date(targetDateStr);
+    if (!isNaN(d.getTime())) {
+      return `${MESES_ES[d.getMonth()]} ${d.getFullYear()}`;
+    }
+  }
+
+  // 3. Fallback al mes y año actual
+  const now = new Date();
+  return `${MESES_ES[now.getMonth()]} ${now.getFullYear()}`;
+}
+

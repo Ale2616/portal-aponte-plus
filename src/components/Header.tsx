@@ -9,7 +9,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { InstallPWAButton } from "./InstallPWAButton";
 import { SecretPinModal } from "./SecretPinModal";
 import { AdminControlModal } from "./AdminControlModal";
-import { LogOut, CreditCard, HelpCircle } from "lucide-react";
+import { Search, CreditCard, HelpCircle, RotateCcw } from "lucide-react";
 
 interface HeaderProps {
   client: ClientProfile | null;
@@ -155,16 +155,16 @@ export function Header({
             {/* Theme Toggle compacto */}
             <ThemeToggle />
 
-            {/* Logout / Cambiar usuario (icono minimalista en móviles) */}
+            {/* Botón Nueva Consulta (Cerrar sesión / Consultar otra cédula) */}
             {client && (
               <button
                 onClick={onLogout}
-                className="inline-flex items-center justify-center p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer flex-shrink-0"
-                title="Cerrar consulta y cambiar de cliente"
-                aria-label="Cerrar consulta y cambiar de cliente"
+                className="inline-flex items-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer flex-shrink-0"
+                title="Consultar otra cédula / Nueva consulta"
+                aria-label="Consultar otra cédula / Nueva consulta"
               >
-                <LogOut className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" strokeWidth={1.75} />
-                <span className="hidden sm:inline">Cambiar</span>
+                <RotateCcw className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" strokeWidth={1.75} />
+                <span className="hidden sm:inline">Nueva Consulta</span>
               </button>
             )}
           </div>

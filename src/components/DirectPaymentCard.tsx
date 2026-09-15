@@ -11,7 +11,7 @@ interface DirectPaymentCardProps {
 }
 
 export function DirectPaymentCard({ onOpenReport }: DirectPaymentCardProps) {
-  const { config } = useConfig();
+  const { config, globalSettings } = useConfig();
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const handleCopy = (text: string, id: string, name: string) => {
@@ -40,7 +40,7 @@ export function DirectPaymentCard({ onOpenReport }: DirectPaymentCardProps) {
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800/80 text-[11px] font-medium text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" strokeWidth={1.75} />
-            <span>Titular: <strong className="text-slate-800 dark:text-slate-200">{config.companyInfo.accountHolder || branding.companyName}</strong></span>
+            <span>Titular: <strong className="text-slate-800 dark:text-slate-200">{globalSettings?.titular || config.companyInfo.accountHolder || "Andrés Aponte / Aponte Plus"}</strong></span>
           </div>
         </div>
       </div>
@@ -48,10 +48,16 @@ export function DirectPaymentCard({ onOpenReport }: DirectPaymentCardProps) {
       {/* Grid de métodos de pago directo: Nequi, Bancolombia, Bre-B */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {branding.paymentMethods.map((method) => {
-          const isNequiOrBreb = method.id.includes("nequi") || method.id.includes("bre-b");
-          const displayNumber = isNequiOrBreb && config.companyInfo.nequiNumber
-            ? config.companyInfo.nequiNumber
-            : method.accountNumber;
+          let displayNumber = method.accountNumber;
+          if (method.id === "nequi" && globalSettings?.canalesPago?.nequi) {
+            displayNumber = globalSettings.canalesPago.nequi;
+          } else if (method.id === "bancolombia" && globalSettings?.canalesPago?.bancolombia) {
+            displayNumber = globalSettings.canalesPago.bancolombia;
+          } else if (method.id === "breb" && globalSettings?.canalesPago?.breB) {
+            displayNumber = globalSettings.canalesPago.breB;
+          } else if (config.companyInfo.nequiNumber && (method.id.includes("nequi") || method.id.includes("bre-b"))) {
+            displayNumber = config.companyInfo.nequiNumber;
+          }
           const isCopied = copiedId === method.id;
 
           return (

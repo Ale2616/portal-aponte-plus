@@ -5,10 +5,16 @@ import { useConfig } from "@/context/ConfigContext";
 import { AlertTriangle, Info, X } from "lucide-react";
 
 export function GlobalAlertBanner() {
-  const { config } = useConfig();
+  const { config, globalSettings } = useConfig();
   const [isDismissed, setIsDismissed] = useState(false);
 
-  if (!config.globalAlert.enabled || isDismissed) {
+  const isAlertActive =
+    globalSettings?.avisoGlobal !== undefined
+      ? globalSettings.avisoGlobal.activo
+      : config.globalAlert.enabled;
+  const alertText = globalSettings?.avisoGlobal?.texto || config.globalAlert.message;
+
+  if (!isAlertActive || isDismissed) {
     return null;
   }
 
@@ -29,7 +35,7 @@ export function GlobalAlertBanner() {
           ) : (
             <Info className="w-4 h-4 text-sky-600 dark:text-sky-400 flex-shrink-0" />
           )}
-          <span className="leading-snug">{config.globalAlert.message}</span>
+          <span className="leading-snug">{alertText}</span>
         </div>
 
         <button

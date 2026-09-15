@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import path from "path";
-import fs from "fs/promises";
+import { redisGet, redisSet } from "@/lib/redis";
+import { getGlobalPortalConfig, setGlobalPortalConfig } from "@/lib/server-config";
+
+export const dynamic = "force-dynamic";
 
 export interface PromocionGlobal {
   imagenUrl: string;
+  imageUrls?: string[];
   titulo: string;
   descripcion: string;
   botonTexto: string;
@@ -14,6 +17,7 @@ export interface PromocionGlobal {
 
 const DEFAULT_PROMO: PromocionGlobal = {
   imagenUrl: "/banner-promo-fibra.jpg",
+  imageUrls: ["/banner-promo-fibra.jpg"],
   titulo: "¡Pásate a Fibra Óptica con Alta Velocidad!",
   descripcion: "Disfruta de la mejor conexión de la región con 100% fibra óptica dedicada y ultra velocidad.",
   botonTexto: "📲 Preguntar por WhatsApp",
@@ -22,26 +26,31 @@ const DEFAULT_PROMO: PromocionGlobal = {
   actualizadoEn: new Date().toISOString(),
 };
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const FILE_PATH = path.join(DATA_DIR, "promocion.json");
-const UPLOADS_DIR = path.join(process.cwd(), "public", "uploads");
+const BANNER_KEY = "banner_data";
 
 async function readPromoData(): Promise<PromocionGlobal> {
   try {
-    const raw = await fs.readFile(FILE_PATH, "utf-8");
-    const parsed = JSON.parse(raw);
-    return {
-      imagenUrl: parsed.imagenUrl ?? DEFAULT_PROMO.imagenUrl,
-      titulo: parsed.titulo ?? DEFAULT_PROMO.titulo,
-      descripcion: parsed.descripcion ?? DEFAULT_PROMO.descripcion,
-      botonTexto: parsed.botonTexto ?? DEFAULT_PROMO.botonTexto,
-      linkWhatsapp: parsed.linkWhatsapp ?? DEFAULT_PROMO.linkWhatsapp,
-      activa: typeof parsed.activa === "boolean" ? parsed.activa : DEFAULT_PROMO.activa,
-      actualizadoEn: parsed.actualizadoEn ?? DEFAULT_PROMO.actualizadoEn,
-    };
-  } catch {
-    return DEFAULT_PROMO;
+    const raw = await redisGet<any>(BANNER_KEY);
+    if (raw && typeof raw === "object") {
+      const imgUrl = raw.imageUrl || raw.imagenUrl || (Array.isArray(raw.imageUrls) ? raw.imageUrls[0] : "") || DEFAULT_PROMO.imagenUrl;
+      const imgs = Array.isArray(raw.imageUrls) && raw.imageUrls.length > 0 ? raw.imageUrls : [imgUrl];
+
+      return {
+        imagenUrl: imgUrl,
+        imageUrls: imgs,
+        titulo: raw.titulo ?? DEFAULT_PROMO.titulo,
+        descripcion: raw.descripcion ?? DEFAULT_PROMO.descripcion,
+        botonTexto: raw.botonTexto ?? DEFAULT_PROMO.botonTexto,
+        linkWhatsapp: raw.linkWhatsapp ?? DEFAULT_PROMO.linkWhatsapp,
+        activa: typeof raw.enabled === "boolean" ? raw.enabled : (typeof raw.activa === "boolean" ? raw.activa : DEFAULT_PROMO.activa),
+        actualizadoEn: raw.actualizadoEn ?? new Date().toISOString(),
+      };
+    }
+  } catch (err) {
+    console.warn("[API Promociones] Error al leer desde Redis:", err);
   }
+
+  return DEFAULT_PROMO;
 }
 
 export async function GET() {
@@ -91,49 +100,71 @@ export async function POST(req: NextRequest) {
     }
 
     const currentData = await readPromoData();
-    let finalImageUrl = (body.imagenUrl ?? currentData.imagenUrl ?? "").toString().trim();
 
-    // Si viene una imagen en Base64, la guardamos físicamente en public/uploads/
-    if (finalImageUrl.startsWith("data:image/")) {
-      try {
-        await fs.mkdir(UPLOADS_DIR, { recursive: true });
-
-        const matches = finalImageUrl.match(/^data:image\/([a-zA-Z0-9+.-]+);base64,(.+)$/);
-        if (matches && matches.length === 3) {
-          const extension = matches[1] === "jpeg" ? "jpg" : matches[1].replace("+xml", "");
-          const buffer = Buffer.from(matches[2], "base64");
-          const fileName = `promo-${Date.now()}.${extension}`;
-          const filePath = path.join(UPLOADS_DIR, fileName);
-
-          await fs.writeFile(filePath, buffer);
-          finalImageUrl = `/uploads/${fileName}`;
-        }
-      } catch (err) {
-        console.warn("[API Promociones] Advertencia al procesar archivo Base64:", err);
-      }
+    // Procesar imágenes (soporte de Base64 directo o URLs)
+    let imageUrls: string[] = [];
+    if (Array.isArray(body.imageUrls)) {
+      imageUrls = body.imageUrls.filter(Boolean);
+    } else if (body.imageUrl || body.imagenUrl) {
+      imageUrls = [(body.imageUrl || body.imagenUrl).toString().trim()];
+    } else if (currentData.imageUrls) {
+      imageUrls = currentData.imageUrls;
     }
 
-    if (!finalImageUrl) {
-      finalImageUrl = "/banner-promo-fibra.jpg";
-    }
+    const finalImageUrl = imageUrls[0] || currentData.imagenUrl || DEFAULT_PROMO.imagenUrl;
+
+    const isEnabled =
+      typeof body.activa === "boolean"
+        ? body.activa
+        : typeof body.enabled === "boolean"
+        ? body.enabled
+        : imageUrls.length > 0;
 
     const updatedData: PromocionGlobal = {
       imagenUrl: finalImageUrl,
+      imageUrls: imageUrls.length > 0 ? imageUrls : [finalImageUrl],
       titulo: (body.titulo ?? currentData.titulo ?? "").toString().trim() || DEFAULT_PROMO.titulo,
       descripcion: (body.descripcion ?? currentData.descripcion ?? "").toString().trim() || DEFAULT_PROMO.descripcion,
       botonTexto: (body.botonTexto ?? currentData.botonTexto ?? "").toString().trim() || DEFAULT_PROMO.botonTexto,
       linkWhatsapp: (body.linkWhatsapp ?? currentData.linkWhatsapp ?? "").toString().trim() || DEFAULT_PROMO.linkWhatsapp,
-      activa: typeof body.activa === "boolean" ? body.activa : (typeof body.enabled === "boolean" ? body.enabled : currentData.activa),
+      activa: isEnabled,
       actualizadoEn: new Date().toISOString(),
     };
 
-    // Asegurar directorio de datos
-    await fs.mkdir(DATA_DIR, { recursive: true });
-    await fs.writeFile(FILE_PATH, JSON.stringify(updatedData, null, 2), "utf-8");
+    // Guardado EXCLUSIVO en Upstash Redis con persistencia indefinida permanente (SIN fs.writeFile, SIN memoria global)
+    await redisSet(BANNER_KEY, {
+      enabled: isEnabled,
+      imageUrl: finalImageUrl,
+      imageUrls: updatedData.imageUrls,
+      titulo: updatedData.titulo,
+      descripcion: updatedData.descripcion,
+      botonTexto: updatedData.botonTexto,
+      linkWhatsapp: updatedData.linkWhatsapp,
+      whatsappMensaje: body.whatsappMensaje || currentData.descripcion,
+      actualizadoEn: updatedData.actualizadoEn,
+    });
+
+    // Sincronizar también con la configuración global
+    try {
+      await setGlobalPortalConfig({
+        homeAdBanner: {
+          enabled: isEnabled,
+          imageUrl: finalImageUrl,
+          imageUrls: updatedData.imageUrls || [],
+          titulo: updatedData.titulo,
+          descripcion: updatedData.descripcion,
+          botonTexto: updatedData.botonTexto,
+          linkWhatsapp: updatedData.linkWhatsapp,
+          whatsappMensaje: body.whatsappMensaje || "Hola, vi la promoción en el portal...",
+        },
+      });
+    } catch (syncErr) {
+      console.warn("[API Promociones] Advertencia al sincronizar con server-config:", syncErr);
+    }
 
     return NextResponse.json({
       success: true,
-      message: "Promoción actualizada correctamente y disponible de forma global para todos los clientes.",
+      message: "Promoción guardada permanentemente en Upstash Redis de forma indefinida.",
       promocion: updatedData,
       ...updatedData,
     });

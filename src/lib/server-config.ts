@@ -1,15 +1,13 @@
 /**
  * Gestor de Persistencia Global del Servidor para Portal Aponte Plus
  *
- * Persistencia:
- *  1. Vercel KV / Upstash Redis REST API si están configuradas las variables de entorno
- *     (KV_REST_API_URL / UPSTASH_REDIS_REST_URL)
- *  2. Almacén persistente en disco (data/portal-config.json o /tmp/ en Vercel Serverless)
- *  3. Caché en memoria RAM de proceso (globalThis)
+ * Persistencia Indefinida:
+ *  - Exclusivamente en Upstash Redis / Vercel KV REST API.
+ *  - Sin variables en memoria global (cero desincronizaciones serverless).
+ *  - Sin guardado en el sistema de archivos local (cero pérdida por efimeridad en Vercel).
+ *  - Sin expiración (ttl/ex/px).
  */
 
-import fs from "fs";
-import path from "path";
 import {
   PortalConfig,
   CompanyInfo,
@@ -18,192 +16,89 @@ import {
   HomeAdBanner,
   DEFAULT_CONFIG,
 } from "@/types/config";
+import { redisGet, redisSet } from "./redis";
 
 export type { PortalConfig, CompanyInfo, PromotionItem, GlobalAlert, HomeAdBanner };
 export { DEFAULT_CONFIG };
 
-// ─── Memoria RAM Global ─────────────────────────────────────────────────────────
+const CONFIG_KEY = "portal:global_config";
+const BANNER_KEY = "banner_data";
 
-declare global {
-  var __GLOBAL_PORTAL_CONFIG__: PortalConfig | undefined;
-}
-
-// ─── Conexión REST a Vercel KV / Upstash Redis ─────────────────────────────────
-
-function getRedisConfig(): { url: string; token: string } | null {
-  const url =
-    process.env.KV_REST_API_URL ||
-    process.env.UPSTASH_REDIS_REST_URL ||
-    process.env.REDIS_REST_API_URL;
-  const token =
-    process.env.KV_REST_API_TOKEN ||
-    process.env.UPSTASH_REDIS_REST_TOKEN ||
-    process.env.REDIS_REST_API_TOKEN;
-
-  if (url && token) {
-    return { url: url.replace(/\/+$/, ""), token };
-  }
-  return null;
-}
-
-async function getFromRedis(): Promise<PortalConfig | null> {
-  const redis = getRedisConfig();
-  if (!redis) return null;
-
+/**
+ * Obtiene la configuración global directamente desde Upstash Redis.
+ * NUNCA sobreescribe con datos o imágenes demo si Upstash contiene datos válidos.
+ * Solo usa DEFAULT_CONFIG si la base de datos está completamente vacía (null).
+ */
+export async function getGlobalPortalConfig(): Promise<PortalConfig> {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3500);
-
-    // Intentar GET estándar de Upstash
-    const res = await fetch(`${redis.url}/get/portal:global_config`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${redis.token}`,
-      },
-      signal: controller.signal,
-      cache: "no-store",
-    });
-
-    clearTimeout(timeout);
-    if (!res.ok) return null;
-
-    const json = await res.json();
-    if (!json || json.result === null || json.result === undefined) return null;
-
-    const parsed: PortalConfig =
-      typeof json.result === "string" ? JSON.parse(json.result) : json.result;
-
-    return parsed;
-  } catch (err) {
-    console.warn("[server-config] Error al leer desde Upstash Redis:", err);
-    return null;
-  }
-}
-
-async function saveToRedis(config: PortalConfig): Promise<boolean> {
-  const redis = getRedisConfig();
-  if (!redis) return false;
-
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-
-    // Formato recomendado oficial Upstash Redis REST API (Array de comando en body POST):
-    // ["SET", "portal:global_config", "<JSON_STRING>"]
-    const commandPayload = JSON.stringify([
-      "SET",
-      "portal:global_config",
-      JSON.stringify(config),
+    // 1. Consultar configuración general y banner en Upstash Redis en paralelo
+    const [redisConfig, redisBanner] = await Promise.all([
+      redisGet<PortalConfig>(CONFIG_KEY),
+      redisGet<HomeAdBanner>(BANNER_KEY),
     ]);
 
-    const res = await fetch(redis.url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${redis.token}`,
-        "Content-Type": "application/json",
-      },
-      body: commandPayload,
-      signal: controller.signal,
-    });
+    // 2. Si existe configuración en Redis
+    if (redisConfig && typeof redisConfig === "object") {
+      const result: PortalConfig = {
+        companyInfo: {
+          ...DEFAULT_CONFIG.companyInfo,
+          ...(redisConfig.companyInfo || {}),
+        },
+        promotions: Array.isArray(redisConfig.promotions)
+          ? redisConfig.promotions
+          : DEFAULT_CONFIG.promotions,
+        globalAlert: {
+          ...DEFAULT_CONFIG.globalAlert,
+          ...(redisConfig.globalAlert || {}),
+        },
+        homeAdBanner: {
+          ...DEFAULT_CONFIG.homeAdBanner,
+          ...(redisConfig.homeAdBanner || {}),
+        },
+        actualizadoEn: redisConfig.actualizadoEn || new Date().toISOString(),
+      };
 
-    clearTimeout(timeout);
-    if (res.ok) return true;
+      // Si existe clave 'banner_data' guardada directamente por el admin, priorizarla
+      if (redisBanner && typeof redisBanner === "object") {
+        result.homeAdBanner = {
+          ...result.homeAdBanner,
+          ...redisBanner,
+        };
+      }
 
-    // Fallback: endpoint directo /set/portal:global_config
-    const fallbackRes = await fetch(`${redis.url}/set/portal:global_config`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${redis.token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(config),
-    });
+      return result;
+    }
 
-    return fallbackRes.ok;
+    // 3. Si solo existe 'banner_data' en Redis
+    if (redisBanner && typeof redisBanner === "object") {
+      return {
+        ...DEFAULT_CONFIG,
+        homeAdBanner: {
+          ...DEFAULT_CONFIG.homeAdBanner,
+          ...redisBanner,
+        },
+        actualizadoEn: new Date().toISOString(),
+      };
+    }
+
+    // 4. Base de datos vacía (null): Retornar configuración por defecto limpia
+    return DEFAULT_CONFIG;
   } catch (err) {
-    console.warn("[server-config] Error al guardar en Upstash Redis:", err);
-    return false;
+    console.warn("[server-config] Error al leer configuración global desde Upstash Redis:", err);
+    return DEFAULT_CONFIG;
   }
 }
 
-// ─── Persistencia en Archivo Local / tmp ────────────────────────────────────────
-
-const DATA_CONFIG_PATH = path.join(process.cwd(), "data", "portal-config.json");
-const TMP_CONFIG_PATH = path.join("/tmp", "portal-config.json");
-
-function readConfigFile(): PortalConfig | null {
-  // 1. Intentar /tmp (contiene la versión más reciente en entornos serverless)
-  try {
-    if (fs.existsSync(/*turbopackIgnore: true*/ TMP_CONFIG_PATH)) {
-      const content = fs.readFileSync(/*turbopackIgnore: true*/ TMP_CONFIG_PATH, "utf-8");
-      const parsed = JSON.parse(content);
-      if (parsed && typeof parsed === "object") return parsed;
-    }
-  } catch {}
-
-  // 2. Intentar ruta estándar de proyecto data/portal-config.json
-  try {
-    if (fs.existsSync(DATA_CONFIG_PATH)) {
-      const content = fs.readFileSync(DATA_CONFIG_PATH, "utf-8");
-      const parsed = JSON.parse(content);
-      if (parsed && typeof parsed === "object") return parsed;
-    }
-  } catch {}
-
-  return null;
-}
-
-function writeConfigFile(config: PortalConfig): void {
-  const jsonString = JSON.stringify(config, null, 2);
-
-  // 1. Escribir en data/portal-config.json si el disco es editable
-  try {
-    const dataDir = path.join(process.cwd(), "data");
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
-    }
-    fs.writeFileSync(DATA_CONFIG_PATH, jsonString, "utf-8");
-  } catch {}
-
-  // 2. Replicar en /tmp/portal-config.json para Vercel Serverless
-  try {
-    fs.writeFileSync(/*turbopackIgnore: true*/ TMP_CONFIG_PATH, jsonString, "utf-8");
-  } catch {}
-}
-
-// ─── Funciones Públicas ─────────────────────────────────────────────────────────
-
-export async function getGlobalPortalConfig(): Promise<PortalConfig> {
-  // 1. Intentar Redis / KV
-  const redisConfig = await getFromRedis();
-  if (redisConfig) {
-    globalThis.__GLOBAL_PORTAL_CONFIG__ = redisConfig;
-    return redisConfig;
-  }
-
-  // 2. Intentar archivo en disco
-  const diskConfig = readConfigFile();
-  if (diskConfig) {
-    globalThis.__GLOBAL_PORTAL_CONFIG__ = diskConfig;
-    return diskConfig;
-  }
-
-  // 3. Memoria global
-  if (globalThis.__GLOBAL_PORTAL_CONFIG__) {
-    return globalThis.__GLOBAL_PORTAL_CONFIG__;
-  }
-
-  // 4. Default
-  globalThis.__GLOBAL_PORTAL_CONFIG__ = DEFAULT_CONFIG;
-  return DEFAULT_CONFIG;
-}
-
+/**
+ * Guarda la configuración global en Upstash Redis con persistencia indefinida.
+ * No utiliza memoria global ni fs.writeFile.
+ */
 export async function setGlobalPortalConfig(
   newConfig: Partial<PortalConfig>
 ): Promise<PortalConfig> {
   const current = await getGlobalPortalConfig();
 
-  // Asegurar que homeAdBanner tenga imageUrls (hasta 5 imágenes) y soporte array vacío
+  // Procesar banner si viene en la actualización
   const incomingBanner: Partial<HomeAdBanner> = newConfig.homeAdBanner ?? {};
   let finalImageUrls: string[] = [];
 
@@ -224,6 +119,15 @@ export async function setGlobalPortalConfig(
     ? incomingBanner.enabled
     : current.homeAdBanner?.enabled ?? true;
 
+  const updatedBanner: HomeAdBanner = {
+    ...current.homeAdBanner,
+    ...incomingBanner,
+    enabled: effectiveEnabled,
+    imageUrl: finalImageUrls[0] || "",
+    imageUrls: finalImageUrls,
+    actualizadoEn: new Date().toISOString(),
+  };
+
   const merged: PortalConfig = {
     companyInfo: {
       ...current.companyInfo,
@@ -236,19 +140,15 @@ export async function setGlobalPortalConfig(
       ...current.globalAlert,
       ...(newConfig.globalAlert || {}),
     },
-    homeAdBanner: {
-      ...current.homeAdBanner,
-      ...incomingBanner,
-      enabled: effectiveEnabled,
-      imageUrl: finalImageUrls[0] || "",
-      imageUrls: finalImageUrls,
-    },
+    homeAdBanner: updatedBanner,
     actualizadoEn: new Date().toISOString(),
   };
 
-  globalThis.__GLOBAL_PORTAL_CONFIG__ = merged;
-  writeConfigFile(merged);
-  await saveToRedis(merged);
+  // Guardar en Upstash Redis de forma indefinida y permanente (SIN ttl ni expiración)
+  await Promise.all([
+    redisSet(CONFIG_KEY, merged),
+    redisSet(BANNER_KEY, updatedBanner),
+  ]);
 
   return merged;
 }

@@ -175,18 +175,32 @@ export function PaymentModal({
     branding.paymentMethods.find((m) => m.id === currentMethodId) ||
     branding.paymentMethods[0];
 
-  const { config } = useConfig();
+  const { config, globalSettings } = useConfig();
 
   const isCurrentNequi =
     currentMethod?.id.includes("nequi") || currentMethod?.id.includes("bre-b");
-  const currentAccountNumber =
-    isCurrentNequi && config.companyInfo.nequiNumber
-      ? config.companyInfo.nequiNumber
-      : currentMethod?.accountNumber || "";
+
+  const currentAccountNumber = (() => {
+    if (currentMethod?.id === "nequi" && globalSettings?.canalesPago?.nequi) {
+      return globalSettings.canalesPago.nequi;
+    }
+    if (currentMethod?.id === "bancolombia" && globalSettings?.canalesPago?.bancolombia) {
+      return globalSettings.canalesPago.bancolombia;
+    }
+    if (currentMethod?.id === "breb" && globalSettings?.canalesPago?.breB) {
+      return globalSettings.canalesPago.breB;
+    }
+    if (isCurrentNequi && config.companyInfo.nequiNumber) {
+      return config.companyInfo.nequiNumber;
+    }
+    return currentMethod?.accountNumber || "";
+  })();
+
   const currentAccountHolder =
-    isCurrentNequi && config.companyInfo.accountHolder
+    globalSettings?.titular ||
+    (isCurrentNequi && config.companyInfo.accountHolder
       ? config.companyInfo.accountHolder
-      : currentMethod?.accountHolder || "";
+      : currentMethod?.accountHolder || "Andrés Aponte / Aponte Plus");
 
   useEffect(() => {
     register("monto");

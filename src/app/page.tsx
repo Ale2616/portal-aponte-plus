@@ -22,16 +22,36 @@ import { SecretPinModal } from "@/components/SecretPinModal";
 import { AdminControlModal } from "@/components/AdminControlModal";
 import { SpeedTestModal } from "@/components/SpeedTestModal";
 import { Loader2, CheckCircle2 } from "lucide-react";
+import { useConfig } from "@/context/ConfigContext";
 
 function PortalContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { refreshConfig } = useConfig();
+
+  // Consulta de configuración pública en tiempo real y sin caché al cargar el portal
+  useEffect(() => {
+    fetch(`/api/config?t=${Date.now()}`, {
+      cache: "no-store",
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        Pragma: "no-cache",
+      },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && refreshConfig) {
+          refreshConfig();
+        }
+      })
+      .catch((err) => console.warn("[Portal Config Fetch Error]:", err));
+  }, [refreshConfig]);
 
   const [client, setClient] = useState<ClientProfile | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasLoggedOut, setHasLoggedOut] = useState(false);
+  const [hasResetConsultation, setHasResetConsultation] = useState(false);
 
   // Modals state
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -52,6 +72,8 @@ function PortalContent() {
     return () => window.removeEventListener("open-admin-secret-pin", handleOpenSecret);
   }, []);
 
+  const hasAutoLoggedRef = useRef(false);
+
   // Buscar cliente por documento de identidad
   const handleSearch = useCallback(
     async (documento: string) => {
@@ -60,7 +82,7 @@ function PortalContent() {
 
       setIsLoading(true);
       setError(null);
-      setHasLoggedOut(false);
+      setHasResetConsultation(false);
 
       try {
         const res = await fetch("/api/cliente/consultar", {
@@ -73,6 +95,15 @@ function PortalContent() {
 
         if (!res.ok || !data.success) {
           throw new Error(data.error || "Abonado no encontrado. Verifica el número de documento.");
+        }
+
+        // 2. Guardado en consulta exitosa (Manual o Automática)
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.setItem("cliente_cedula", cleanDoc);
+          } catch (e) {
+            console.warn("[localStorage error]:", e);
+          }
         }
 
         setClient(data.cliente);
@@ -117,8 +148,13 @@ function PortalContent() {
         setInvoices([]);
         setError(err.message || "Abonado no encontrado.");
 
-        // Limpiar URL si la cédula falló para no quedarse en bucle
+        // Limpiar URL y localStorage si la cédula falló para no quedarse en bucle
         if (typeof window !== "undefined") {
+          try {
+            localStorage.removeItem("cliente_cedula");
+          } catch (e) {
+            console.warn("[localStorage error]:", e);
+          }
           window.history.replaceState({}, "", "/");
         }
 
@@ -132,39 +168,86 @@ function PortalContent() {
     []
   );
 
-  // Magic Link: Detectar si la URL contiene ?cedula=... o ?doc=...
+  // 1. Carga automática al abrir el portal (Auto-Login por URL ?cedula= o por localStorage)
   useEffect(() => {
-    if (hasLoggedOut) return;
-    const magicCedula = searchParams.get("cedula") || searchParams.get("doc");
-    if (magicCedula && !client && !isLoading) {
-      handleSearch(magicCedula);
-    }
-  }, [searchParams, client, isLoading, hasLoggedOut, handleSearch]);
+    if (hasResetConsultation || hasAutoLoggedRef.current) return;
 
-  // Cerrar sesión / Cambiar de usuario
-  const handleLogout = useCallback(() => {
+    // Primero, revisar si viene el parámetro 'cedula' o 'doc' en la URL
+    const urlCedula = (searchParams.get("cedula") || searchParams.get("doc") || "").trim();
+    if (urlCedula) {
+      hasAutoLoggedRef.current = true;
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("cliente_cedula", urlCedula);
+        } catch (e) {
+          console.warn("[localStorage error]:", e);
+        }
+      }
+      handleSearch(urlCedula);
+      return;
+    }
+
+    // Si no viene en la URL, buscar si existe 'cliente_cedula' en localStorage
+    if (typeof window !== "undefined") {
+      try {
+        const savedCedula = (localStorage.getItem("cliente_cedula") || "").trim();
+        if (savedCedula && !client && !isLoading) {
+          hasAutoLoggedRef.current = true;
+          handleSearch(savedCedula);
+        }
+      } catch (e) {
+        console.warn("[localStorage error]:", e);
+      }
+    }
+  }, [searchParams, client, isLoading, hasResetConsultation, handleSearch]);
+
+  // 3. Botón "Nueva Consulta" (Cerrar sesión / Limpiar estado)
+  const handleResetConsultation = useCallback(() => {
     setClient(null);
     setInvoices([]);
     setError(null);
     setPaymentReportSuccessData(null);
-    setHasLoggedOut(true);
+    setHasResetConsultation(true);
+    hasAutoLoggedRef.current = true;
 
     if (typeof window !== "undefined") {
+      try {
+        localStorage.removeItem("cliente_cedula");
+      } catch (e) {
+        console.warn("[localStorage error]:", e);
+      }
       window.history.replaceState({}, "", "/");
     }
     router.replace("/");
-    toast.info("Has cerrado tu consulta de abonado.", {
+    toast.info("Consulta finalizada", {
       duration: 3000,
-      description: "Puedes ingresar nuevamente con tu número de documento.",
+      description: "Puedes ingresar otro número de documento para consultar su servicio.",
     });
   }, [router]);
+
+  // Filtro robusto de facturas con saldo pendiente (soporte multi-factura)
+  const isPaidInvoice = (i: Invoice) => {
+    const est = String(i.estado || "").toLowerCase().trim();
+    return (
+      est === "pagada" ||
+      est === "pago" ||
+      est === "pagado" ||
+      est === "cancelada" ||
+      est === "cobrada" ||
+      (i.saldoPendiente === 0 && i.total > 0)
+    );
+  };
+
+  const pendingInvoices = invoices.filter(
+    (i) => !isPaidInvoice(i) && (i.saldoPendiente > 0 || i.estado === "pendiente" || i.estado === "vencida")
+  );
 
   // Abrir modal de reporte de pago
   const handleOpenPayment = (invoice?: Invoice) => {
     if (invoice) {
       setPaymentInitialInvoiceId(invoice.id);
     } else {
-      const firstPending = invoices.find((i) => i.estado !== "pagada");
+      const firstPending = pendingInvoices[0] || invoices[0];
       setPaymentInitialInvoiceId(firstPending?.id);
     }
     setIsPaymentModalOpen(true);
@@ -181,8 +264,6 @@ function PortalContent() {
       )
     );
   };
-
-  const pendingInvoices = invoices.filter((i) => i.estado !== "pagada");
 
   return (
     <div className="min-h-[100dvh] w-full overflow-x-hidden flex flex-col justify-between bg-gradient-to-b from-slate-50 via-sky-50/20 to-slate-100 dark:from-[#060913] dark:via-[#081020] dark:to-[#05070f] text-slate-900 dark:text-slate-100 transition-colors relative">
@@ -205,7 +286,7 @@ function PortalContent() {
       <div className="relative z-10">
         <Header
           client={client}
-          onLogout={handleLogout}
+          onLogout={handleResetConsultation}
           onOpenBankAccounts={() => setIsBankAccountsOpen(true)}
           onOpenFaq={() => setIsFaqOpen(true)}
           onOpenAdminPin={() => setShowAdminPinModal(true)}
@@ -259,7 +340,7 @@ function PortalContent() {
               client={client}
               onOpenPayment={() => handleOpenPayment()}
               onOpenBankAccounts={() => setIsBankAccountsOpen(true)}
-              onChangeUser={handleLogout}
+              onChangeUser={handleResetConsultation}
             />
 
             {/* 3. Tarjeta de Métricas y Tráfico de Red */}
@@ -317,13 +398,15 @@ function PortalContent() {
       />
 
       {/* Modal de Factura PDF */}
-      <InvoicePdfModal
-        invoice={selectedInvoiceForPdf}
-        client={client}
-        isOpen={Boolean(selectedInvoiceForPdf)}
-        onClose={() => setSelectedInvoiceForPdf(null)}
-        onPayClick={(inv) => handleOpenPayment(inv)}
-      />
+      {selectedInvoiceForPdf && (
+        <InvoicePdfModal
+          invoice={selectedInvoiceForPdf}
+          client={client}
+          isOpen={Boolean(selectedInvoiceForPdf)}
+          onClose={() => setSelectedInvoiceForPdf(null)}
+          onPayClick={(inv) => handleOpenPayment(inv)}
+        />
+      )}
 
       {/* Modal de FAQs */}
       <FaqModal

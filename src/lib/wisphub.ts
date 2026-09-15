@@ -8,7 +8,7 @@ import {
   NetworkUsageData,
   DayUsage,
 } from "./types";
-import { generateRadicado } from "./utils";
+import { generateRadicado, formatInvoiceMonth } from "./utils";
 import { scrapeTrafficWeek } from "./wisphub-scraper";
 
 /**
@@ -346,8 +346,8 @@ export function mapWisphubInvoice(raw: WisphubInvoiceItem): Invoice {
       periodoStr = match[1].trim();
     }
   }
-  if (!periodoStr) {
-    periodoStr = "Mes en curso";
+  if (!periodoStr || periodoStr.toLowerCase().includes("mes en curso")) {
+    periodoStr = formatInvoiceMonth(periodoStr, raw.fecha_emision || raw.fecha || raw.created_at, dueDateStr);
   }
 
   // Concepto limpio

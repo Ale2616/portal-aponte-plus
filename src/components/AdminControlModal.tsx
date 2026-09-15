@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useConfig, PromotionItem } from "@/context/ConfigContext";
+import { BannerItem, DEFAULT_GLOBAL_SETTINGS } from "@/types/config";
 import { HomeAdCarousel } from "./HomeAdCarousel";
-import { compressImageToDataUrl, isDefaultImageList } from "@/lib/image-compression";
+import { compressImageToDataUrl } from "@/lib/image-compression";
 import {
   Sliders,
   Sparkles,
@@ -35,41 +36,42 @@ interface AdminControlModalProps {
 export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
   const {
     config,
+    globalSettings,
+    saveGlobalSettings,
     updateCompanyInfo,
     addPromotion,
     deletePromotion,
     togglePromotion,
-    updateGlobalAlert,
-    updateHomeAdBanner,
     resetToDefaults,
-    setLocalConfig,
   } = useConfig();
 
   const [activeTab, setActiveTab] = useState<"banner" | "promos" | "comercial" | "alerta">("banner");
 
-  // Estados locales para edición de Info Comercial
-  const [companyName, setCompanyName] = useState(config.companyInfo.companyName);
-  const [supportPhone, setSupportPhone] = useState(config.companyInfo.supportPhone);
-  const [nequiNumber, setNequiNumber] = useState(config.companyInfo.nequiNumber);
-  const [accountHolder, setAccountHolder] = useState(config.companyInfo.accountHolder);
+  // ─── Estados locales para Configuración Global (isp:global_settings) ───────
+  const [titular, setTitular] = useState(globalSettings.titular || DEFAULT_GLOBAL_SETTINGS.titular);
+  const [nequi, setNequi] = useState(globalSettings.canalesPago?.nequi || DEFAULT_GLOBAL_SETTINGS.canalesPago.nequi);
+  const [bancolombia, setBancolombia] = useState(globalSettings.canalesPago?.bancolombia || DEFAULT_GLOBAL_SETTINGS.canalesPago.bancolombia);
+  const [breB, setBreB] = useState(globalSettings.canalesPago?.breB || DEFAULT_GLOBAL_SETTINGS.canalesPago.breB);
 
-  // Estados locales para Aviso Global
-  const [alertEnabled, setAlertEnabled] = useState(config.globalAlert.enabled);
-  const [alertMessage, setAlertMessage] = useState(config.globalAlert.message);
+  // Banners array tipado (BannerItem[])
+  const [banners, setBanners] = useState<BannerItem[]>(() => {
+    if (Array.isArray(globalSettings.banners) && globalSettings.banners.length > 0) {
+      return globalSettings.banners;
+    }
+    return DEFAULT_GLOBAL_SETTINGS.banners;
+  });
+
+  // Aviso Global
+  const [alertEnabled, setAlertEnabled] = useState(globalSettings.avisoGlobal?.activo ?? false);
+  const [alertMessage, setAlertMessage] = useState(globalSettings.avisoGlobal?.texto || DEFAULT_GLOBAL_SETTINGS.avisoGlobal.texto);
   const [alertType, setAlertType] = useState<"warning" | "info">(config.globalAlert.type);
 
-  // Estados locales para Banner Publicitario de Inicio (Hasta 5 imágenes)
+  // Info Comercial adicional
+  const [companyName, setCompanyName] = useState(config.companyInfo.companyName);
+  const [supportPhone, setSupportPhone] = useState(config.companyInfo.supportPhone);
+
+  // Banner textos y visualización
   const [bannerEnabled, setBannerEnabled] = useState(config.homeAdBanner?.enabled ?? true);
-  const [bannerImageUrls, setBannerImageUrls] = useState<string[]>(() => {
-    const configImgs = config.homeAdBanner?.imageUrls;
-    if (Array.isArray(configImgs)) {
-      return configImgs.slice(0, 5);
-    }
-    if (config.homeAdBanner?.imageUrl) {
-      return [config.homeAdBanner.imageUrl];
-    }
-    return [];
-  });
   const [newImageUrlInput, setNewImageUrlInput] = useState("");
   const [bannerTitulo, setBannerTitulo] = useState(
     config.homeAdBanner?.titulo ?? "¡Pásate a Fibra Óptica con Alta Velocidad!"
@@ -87,24 +89,31 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
   );
 
   const wasOpenRef = useRef(false);
-  const hasUserModifiedBannerRef = useRef(false);
   const [isCompressingImage, setIsCompressingImage] = useState(false);
+  const [isSavingGlobal, setIsSavingGlobal] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Sincronizar estados locales ÚNICAMENTE cuando el modal se abre (transición de cerrado a abierto)
-  // Se ignora config en la dependencia para evitar sobreescrituras por sondeos o refetch en segundo plano
+  // Sincronizar estados locales ÚNICAMENTE cuando el modal se abre
   useEffect(() => {
     if (isOpen && !wasOpenRef.current) {
+      setTitular(globalSettings.titular || DEFAULT_GLOBAL_SETTINGS.titular);
+      setNequi(globalSettings.canalesPago?.nequi || DEFAULT_GLOBAL_SETTINGS.canalesPago.nequi);
+      setBancolombia(globalSettings.canalesPago?.bancolombia || DEFAULT_GLOBAL_SETTINGS.canalesPago.bancolombia);
+      setBreB(globalSettings.canalesPago?.breB || DEFAULT_GLOBAL_SETTINGS.canalesPago.breB);
+      if (Array.isArray(globalSettings.banners) && globalSettings.banners.length > 0) {
+        setBanners(globalSettings.banners);
+      } else {
+        setBanners(DEFAULT_GLOBAL_SETTINGS.banners);
+      }
+      setAlertEnabled(globalSettings.avisoGlobal?.activo ?? false);
+      setAlertMessage(globalSettings.avisoGlobal?.texto || DEFAULT_GLOBAL_SETTINGS.avisoGlobal.texto);
+
       setCompanyName(config.companyInfo.companyName);
       setSupportPhone(config.companyInfo.supportPhone);
-      setNequiNumber(config.companyInfo.nequiNumber);
-      setAccountHolder(config.companyInfo.accountHolder);
-      setAlertEnabled(config.globalAlert.enabled);
-      setAlertMessage(config.globalAlert.message);
       setAlertType(config.globalAlert.type);
 
       if (config.homeAdBanner) {
@@ -113,27 +122,21 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
         setBannerDescripcion(config.homeAdBanner.descripcion);
         setBannerBotonTexto(config.homeAdBanner.botonTexto);
         setBannerWhatsappMensaje(config.homeAdBanner.whatsappMensaje);
-
-        if (Array.isArray(config.homeAdBanner.imageUrls)) {
-          setBannerImageUrls(config.homeAdBanner.imageUrls.slice(0, 5));
-        } else if (config.homeAdBanner.imageUrl) {
-          setBannerImageUrls([config.homeAdBanner.imageUrl]);
-        } else {
-          setBannerImageUrls([]);
-        }
       }
     }
 
     wasOpenRef.current = isOpen;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [isOpen, globalSettings, config]);
 
-  // Manejo de carga de archivos locales con compresión previa en Canvas (máx 1080px, calidad 0.75 WebP/JPEG)
+  // Array de URLs de banners activos para la vista previa del carrusel
+  const bannerImageUrls = banners.filter((b) => b.active).map((b) => b.url);
+
+  // Manejo de carga de archivos locales con compresión previa en Canvas (máx 1080px, calidad 0.75)
   const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    const availableSlots = 5 - bannerImageUrls.length;
+    const availableSlots = 5 - banners.length;
     if (availableSlots <= 0) {
       toast.warning("Límite alcanzado: máximo 5 imágenes para el carrusel publicitario.");
       e.target.value = "";
@@ -149,31 +152,27 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
     );
 
     try {
-      const compressedList: string[] = [];
-      for (const file of filesToProcess) {
+      const newItems: BannerItem[] = [];
+      for (let i = 0; i < filesToProcess.length; i++) {
+        const file = filesToProcess[i];
         const compressedBase64 = await compressImageToDataUrl(file, {
           maxWidth: 1080,
           quality: 0.75,
         });
-        compressedList.push(compressedBase64);
+        newItems.push({
+          id: `banner-${Date.now()}-${i}-${Math.random().toString(36).substring(2, 6)}`,
+          url: compressedBase64,
+          active: true,
+        });
       }
 
-      setBannerImageUrls((prev) => {
-        const next = [...prev, ...compressedList].slice(0, 5);
-        hasUserModifiedBannerRef.current = true;
-        if (typeof window !== "undefined") {
-          try {
-            localStorage.setItem("portal_admin_banner_images_cache", JSON.stringify(next));
-          } catch {}
-        }
-        return next;
-      });
+      setBanners((prev) => [...prev, ...newItems].slice(0, 5));
 
       toast.success(
         filesToProcess.length === 1
-          ? `Imagen optimizada y añadida (${Math.min(bannerImageUrls.length + 1, 5)}/5).`
+          ? `Imagen optimizada y añadida (${Math.min(banners.length + 1, 5)}/5).`
           : `¡${filesToProcess.length} imágenes optimizadas y añadidas! (${Math.min(
-              bannerImageUrls.length + filesToProcess.length,
+              banners.length + filesToProcess.length,
               5
             )}/5)`,
         {
@@ -189,134 +188,108 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
       });
     } finally {
       setIsCompressingImage(false);
-      e.target.value = ""; // Limpiar input file
+      e.target.value = "";
     }
   };
 
   const handleAddImageUrl = async () => {
     const trimmed = newImageUrlInput.trim();
     if (!trimmed) return;
-    if (bannerImageUrls.length >= 5) {
+    if (banners.length >= 5) {
       toast.warning("Máximo 5 imágenes permitidas en el carrusel.");
       return;
     }
 
     try {
-      // Si el usuario ingresó un Base64 largo directamente, comprimirlo con Canvas
       const finalUrl = trimmed.startsWith("data:image/")
         ? await compressImageToDataUrl(trimmed, { maxWidth: 1080, quality: 0.75 })
         : trimmed;
 
-      setBannerImageUrls((prev) => {
-        const next = [...prev, finalUrl].slice(0, 5);
-        hasUserModifiedBannerRef.current = true;
-        if (typeof window !== "undefined") {
-          try {
-            localStorage.setItem("portal_admin_banner_images_cache", JSON.stringify(next));
-          } catch {}
-        }
-        return next;
-      });
+      const newItem: BannerItem = {
+        id: `banner-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        url: finalUrl,
+        active: true,
+      };
+
+      setBanners((prev) => [...prev, newItem].slice(0, 5));
       setNewImageUrlInput("");
-      toast.success(`Imagen añadida al carrusel (${bannerImageUrls.length + 1}/5).`);
+      toast.success(`Imagen añadida al carrusel (${banners.length + 1}/5).`);
     } catch (err: any) {
       toast.error("No se pudo añadir la imagen", { description: err.message });
     }
   };
 
   const handleRemoveImage = (indexToRemove: number) => {
-    setBannerImageUrls((prev) => {
-      const next = prev.filter((_, idx) => idx !== indexToRemove);
-      hasUserModifiedBannerRef.current = true;
-      if (next.length === 0) {
-        setBannerEnabled(false);
-      }
-      if (typeof window !== "undefined") {
-        try {
-          localStorage.setItem("portal_admin_banner_images_cache", JSON.stringify(next));
-        } catch {}
-      }
-      return next;
-    });
+    setBanners((prev) => prev.filter((_, idx) => idx !== indexToRemove));
     toast.info("Imagen retirada del carrusel.");
   };
 
   const handleSetPrimaryImage = (index: number) => {
     if (index === 0) return;
-    setBannerImageUrls((prev) => {
+    setBanners((prev) => {
       const copy = [...prev];
       const selected = copy.splice(index, 1)[0];
       copy.unshift(selected);
-      hasUserModifiedBannerRef.current = true;
-      if (typeof window !== "undefined") {
-        try {
-          localStorage.setItem("portal_admin_banner_images_cache", JSON.stringify(copy));
-        } catch {}
-      }
       return copy;
     });
     toast.success("Imagen establecida como principal (primera diapositiva).");
   };
 
-  const [isSavingBanner, setIsSavingBanner] = useState(false);
+  const handleToggleBannerActive = (index: number) => {
+    setBanners((prev) =>
+      prev.map((b, idx) => (idx === index ? { ...b, active: !b.active } : b))
+    );
+  };
 
-  const handleSaveBanner = async () => {
-    setIsSavingBanner(true);
-    const cleanPhone = (supportPhone || "3185577157").replace(/\D/g, "");
-    const phoneWithCountry = cleanPhone.startsWith("57") ? cleanPhone : `57${cleanPhone}`;
-    const defaultMsg =
-      "Hola, vi la promoción en el portal y deseo más información sobre el servicio de internet";
-    const waMsg = bannerWhatsappMensaje.trim() || defaultMsg;
-    const linkWhatsapp = `https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(waMsg)}`;
-    
-    // Validar y asegurar compresión Canvas previa (máx 1080px, calidad 0.75) para todas las imágenes Base64
-    const validImgs = bannerImageUrls.filter(Boolean);
-    const finalImgs: string[] = [];
-
-    for (const img of validImgs) {
-      if (img.startsWith("data:image/") && img.length > 120000) {
-        try {
-          const comp = await compressImageToDataUrl(img, { maxWidth: 1080, quality: 0.75 });
-          finalImgs.push(comp);
-        } catch {
-          finalImgs.push(img);
-        }
-      } else {
-        finalImgs.push(img);
-      }
-    }
-
-    // Auto-desactivar banner si el arreglo queda vacío
-    const isAutoDisabled = finalImgs.length === 0;
-    const effectiveEnabled = isAutoDisabled ? false : bannerEnabled;
-    if (isAutoDisabled) {
-      setBannerEnabled(false);
-    }
+  // ─── Guardado Reactivo Centralizado en /api/config ──────────────────────────
+  const handleSaveChanges = async () => {
+    setIsSavingGlobal(true);
+    const toastId = toast.loading("Guardando en la nube...");
 
     try {
-      // Guardar directamente en el endpoint unificado del servidor
-      const res = await fetch("/api/configuracion", {
+      const cleanPhone = (supportPhone || "3185577157").replace(/\D/g, "");
+      const phoneWithCountry = cleanPhone.startsWith("57") ? cleanPhone : `57${cleanPhone}`;
+      const defaultMsg =
+        "Hola, vi la promoción en el portal y deseo más información sobre el servicio de internet";
+      const waMsg = bannerWhatsappMensaje.trim() || defaultMsg;
+      const linkWhatsapp = `https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(waMsg)}`;
+
+      // Filtrar banners válidos y estructurar BannerItem
+      const validBanners: BannerItem[] = banners
+        .filter((b) => Boolean(b.url))
+        .slice(0, 5)
+        .map((b, idx) => ({
+          id: b.id || `banner-${idx + 1}`,
+          url: b.url,
+          active: Boolean(b.active),
+        }));
+
+      const activeBanners = validBanners.filter((b) => b.active);
+
+      const payload = {
+        pin: "1130",
+        titular: (titular || DEFAULT_GLOBAL_SETTINGS.titular).trim(),
+        canalesPago: {
+          nequi: (nequi || DEFAULT_GLOBAL_SETTINGS.canalesPago.nequi).trim(),
+          bancolombia: (bancolombia || DEFAULT_GLOBAL_SETTINGS.canalesPago.bancolombia).trim(),
+          breB: (breB || DEFAULT_GLOBAL_SETTINGS.canalesPago.breB).trim(),
+        },
+        banners: validBanners,
+        avisoGlobal: {
+          activo: Boolean(alertEnabled),
+          texto: (alertMessage || DEFAULT_GLOBAL_SETTINGS.avisoGlobal.texto).trim(),
+        },
+      };
+
+      // 1. Guardar en API centralizada /api/config
+      const res = await fetch("/api/config", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Cache-Control": "no-cache",
         },
-        body: JSON.stringify({
-          pin: "1130",
-          config: {
-            homeAdBanner: {
-              enabled: effectiveEnabled,
-              imageUrl: finalImgs[0] || "",
-              imageUrls: finalImgs,
-              titulo: bannerTitulo.trim() || "¡Pásate a Fibra Óptica con Alta Velocidad!",
-              descripcion:
-                bannerDescripcion.trim() ||
-                "Disfruta de la mejor conexión de la región con 100% fibra óptica dedicada.",
-              botonTexto: bannerBotonTexto.trim() || "📲 Preguntar por WhatsApp",
-              whatsappMensaje: waMsg,
-              linkWhatsapp,
-            },
-          },
-        }),
+        cache: "no-store",
+        body: JSON.stringify(payload),
       });
 
       let data: any = {};
@@ -324,107 +297,67 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
         data = await res.json();
       } catch {
         if (res.status === 413) {
-          throw new Error("El tamaño total de las imágenes supera el límite de Vercel (Error 413).");
+          throw new Error("El tamaño total supera el límite de Vercel (Error 413). Reduce el número o peso de imágenes.");
         }
       }
 
       if (!res.ok || !data.success) {
-        throw new Error(data.error || `Error (${res.status}): No se pudo guardar la configuración.`);
+        throw new Error(data.error || `Error (${res.status}): No se pudo sincronizar la configuración.`);
       }
 
-      // Sincronizar contexto localmente con la configuración guardada por el servidor
-      if (data.config) {
-        setLocalConfig(data.config);
+      // 2. Sincronizar en el Contexto Global
+      await saveGlobalSettings({
+        titular: payload.titular,
+        canalesPago: payload.canalesPago,
+        banners: payload.banners,
+        avisoGlobal: payload.avisoGlobal,
+      });
+
+      // 3. Sincronizar datos complementarios en /api/configuracion
+      try {
+        await fetch("/api/configuracion", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pin: "1130",
+            config: {
+              companyInfo: {
+                companyName: companyName.trim() || "Internet Aponte Plus",
+                supportPhone: supportPhone.trim() || "3185577157",
+                nequiNumber: payload.canalesPago.nequi,
+                accountHolder: payload.titular,
+              },
+              homeAdBanner: {
+                enabled: activeBanners.length > 0 && bannerEnabled,
+                imageUrl: activeBanners[0]?.url || "",
+                imageUrls: activeBanners.map((b) => b.url),
+                titulo: bannerTitulo.trim() || "¡Pásate a Fibra Óptica con Alta Velocidad!",
+                descripcion:
+                  bannerDescripcion.trim() ||
+                  "Disfruta de la mejor conexión de la región con 100% fibra óptica dedicada.",
+                botonTexto: bannerBotonTexto.trim() || "📲 Preguntar por WhatsApp",
+                whatsappMensaje: waMsg,
+                linkWhatsapp,
+              },
+            },
+          }),
+        });
+      } catch (e) {
+        console.warn("[Complementary Config Sync]:", e);
       }
 
-      hasUserModifiedBannerRef.current = false;
-      setBannerImageUrls(finalImgs);
-      if (typeof window !== "undefined") {
-        try {
-          localStorage.setItem("portal_admin_banner_images_cache", JSON.stringify(finalImgs));
-        } catch {}
-      }
-
-      toast.success(
-        isAutoDisabled
-          ? "Banner guardado sin imágenes y auto-desactivado del portal."
-          : `¡Carrusel publicitario guardado! (${finalImgs.length}/5 imágenes activas).`,
-        {
-          description: isAutoDisabled
-            ? "El banner no ocupará espacio ni se mostrará en el portal."
-            : "Sincronizado globalmente en el servidor para todos los abonados.",
-        }
-      );
+      toast.success("✓ Sincronizado para todos los usuarios", {
+        id: toastId,
+        description: "Configuración global actualizada en Redis en tiempo real sin caché.",
+      });
     } catch (err: any) {
-      console.error("[handleSaveBanner Error]:", err);
-      toast.error("Error al guardar en el servidor", {
-        description: err.message || "No se pudo sincronizar la promoción.",
+      console.error("[Save Global Error]:", err);
+      toast.error("Error al sincronizar con la nube", {
+        id: toastId,
+        description: err.message || "Por favor verifica la conexión.",
       });
     } finally {
-      setIsSavingBanner(false);
-    }
-  };
-
-  // Guardar Datos Comerciales en el Servidor
-  const handleSaveCompany = async () => {
-    try {
-      const res = await fetch("/api/configuracion", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          pin: "1130",
-          config: {
-            companyInfo: {
-              companyName: companyName.trim() || "Internet Aponte Plus",
-              supportPhone: supportPhone.trim() || "3185577157",
-              nequiNumber: nequiNumber.trim() || "311 276 0959",
-              accountHolder: accountHolder.trim() || "Orlando Aponte",
-            },
-          },
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error);
-
-      if (data.config) {
-        setLocalConfig(data.config);
-      }
-      toast.success("Datos comerciales guardados globalmente en el servidor.");
-    } catch (err: any) {
-      toast.error("Error al guardar datos comerciales", { description: err.message });
-    }
-  };
-
-  // Guardar Aviso Global en el Servidor
-  const handleSaveAlert = async () => {
-    try {
-      const res = await fetch("/api/configuracion", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          pin: "1130",
-          config: {
-            globalAlert: {
-              enabled: alertEnabled,
-              message: alertMessage.trim() || "Aviso de mantenimiento programado.",
-              type: alertType,
-            },
-          },
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error);
-
-      if (data.config) {
-        setLocalConfig(data.config);
-      }
-      toast.success(
-        alertEnabled
-          ? "Aviso publicado globalmente en el servidor para todos los clientes."
-          : "Aviso desactivado en el servidor."
-      );
-    } catch (err: any) {
-      toast.error("Error al guardar aviso", { description: err.message });
+      setIsSavingGlobal(false);
     }
   };
 
@@ -491,11 +424,11 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                 </span>
                 <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Base de Datos Servidor
+                  Upstash Redis en Tiempo Real
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Sincronización global en tiempo real • Cero almacenamiento local
+                Sincronización global sin caché • Directo a la nube
               </p>
             </div>
           </div>
@@ -520,8 +453,8 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
             }`}
           >
             <Megaphone className="w-4 h-4" />
-            <span>Banner de Inicio ({bannerImageUrls.length} imgs)</span>
-            {config.homeAdBanner?.enabled && (
+            <span>Banner de Inicio ({banners.length} imgs)</span>
+            {banners.filter((b) => b.active).length > 0 && (
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             )}
           </button>
@@ -547,7 +480,7 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
             }`}
           >
             <Building2 className="w-4 h-4" />
-            <span>Información Comercial</span>
+            <span>Información Comercial y Cuentas</span>
           </button>
 
           <button
@@ -560,7 +493,7 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
           >
             <AlertTriangle className="w-4 h-4" />
             <span>Aviso Global</span>
-            {config.globalAlert.enabled && (
+            {alertEnabled && (
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
             )}
           </button>
@@ -587,26 +520,26 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                 </div>
 
                 <div className="flex items-center gap-3 bg-slate-900/90 px-4 py-2 rounded-xl border border-slate-700/80 self-start sm:self-auto">
-                  <span className={`text-xs font-bold ${bannerEnabled ? "text-emerald-400" : "text-slate-400"}`}>
-                    {bannerEnabled ? "Visible en Inicio" : "Banner Oculto"}
+                  <span className={`text-xs font-bold ${bannerEnabled && bannerImageUrls.length > 0 ? "text-emerald-400" : "text-slate-400"}`}>
+                    {bannerEnabled && bannerImageUrls.length > 0 ? "Visible en Inicio" : "Banner Oculto"}
                   </span>
                   <button
                     type="button"
                     onClick={() => setBannerEnabled(!bannerEnabled)}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
-                      bannerEnabled ? "bg-emerald-500" : "bg-slate-700"
+                      bannerEnabled && bannerImageUrls.length > 0 ? "bg-emerald-500" : "bg-slate-700"
                     }`}
                   >
                     <span
                       className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        bannerEnabled ? "translate-x-6" : "translate-x-1"
+                        bannerEnabled && bannerImageUrls.length > 0 ? "translate-x-6" : "translate-x-1"
                       }`}
                     />
                   </button>
                 </div>
               </div>
 
-              {/* GRID PRINCIPAL: Vista previa en carrusel a la izquierda, formulario a la derecha */}
+              {/* GRID PRINCIPAL: Vista previa a la izquierda, formulario a la derecha */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-7 items-start">
                 
                 {/* ── COLUMNA IZQUIERDA: CARRUSEL EN VIVO ── */}
@@ -621,7 +554,6 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                     </span>
                   </div>
 
-                  {/* Render del Carrusel Real */}
                   {/* Render del Carrusel Real o Estado Vacío */}
                   {bannerImageUrls.length > 0 ? (
                     <HomeAdCarousel
@@ -656,30 +588,32 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                       <div className="flex items-center gap-2">
                         <ImageIcon className="w-4 h-4 text-amber-400" />
                         <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-                          1. Imágenes del Carrusel ({bannerImageUrls.length}/5)
+                          1. Imágenes del Carrusel ({banners.length}/5)
                         </h4>
                       </div>
                       <span className="text-[11px] text-slate-400 font-medium">
-                        {5 - bannerImageUrls.length} disponibles
+                        {5 - banners.length} disponibles
                       </span>
                     </div>
 
                     {/* Strip de Miniaturas Cargadas */}
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                      {bannerImageUrls.map((imgSrc, idx) => (
+                      {banners.map((item, idx) => (
                         <div
-                          key={idx}
-                          className="relative group rounded-xl overflow-hidden border border-slate-700 bg-slate-950 aspect-[16/9] flex items-center justify-center"
+                          key={item.id || idx}
+                          className={`relative group rounded-xl overflow-hidden border bg-slate-950 aspect-[16/9] flex items-center justify-center transition-all ${
+                            item.active ? "border-slate-700" : "border-slate-800 opacity-50"
+                          }`}
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
-                            src={imgSrc}
+                            src={item.url}
                             alt={`Miniatura ${idx + 1}`}
                             className="w-full h-full object-contain p-1"
                           />
 
                           {/* Badge de Posición / Principal */}
-                          <div className="absolute top-1.5 left-1.5">
+                          <div className="absolute top-1.5 left-1.5 flex items-center gap-1">
                             {idx === 0 ? (
                               <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-amber-500 text-slate-950 flex items-center gap-1 shadow-sm">
                                 <Star className="w-2.5 h-2.5 fill-current" />
@@ -690,10 +624,15 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                                 #{idx + 1}
                               </span>
                             )}
+                            {!item.active && (
+                              <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-rose-950/90 text-rose-300 border border-rose-500/30">
+                                Oculto
+                              </span>
+                            )}
                           </div>
 
                           {/* Acciones en Hover */}
-                          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 p-1">
+                          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 p-1">
                             {idx !== 0 && (
                               <button
                                 type="button"
@@ -704,6 +643,16 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                                 <Star className="w-3.5 h-3.5 fill-current" />
                               </button>
                             )}
+                            <button
+                              type="button"
+                              onClick={() => handleToggleBannerActive(idx)}
+                              className={`p-1.5 rounded-lg text-white text-[10px] cursor-pointer ${
+                                item.active ? "bg-slate-700 hover:bg-slate-600" : "bg-emerald-600 hover:bg-emerald-500"
+                              }`}
+                              title={item.active ? "Ocultar en portal" : "Mostrar en portal"}
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
                             <button
                               type="button"
                               onClick={() => handleRemoveImage(idx)}
@@ -717,7 +666,7 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                       ))}
 
                       {/* Botón de Carga / Añadir si hay < 5 */}
-                      {bannerImageUrls.length < 5 && (
+                      {banners.length < 5 && (
                         <label
                           className={`border-2 border-dashed border-slate-700 hover:border-amber-400/60 rounded-xl flex flex-col items-center justify-center p-3 text-center cursor-pointer transition-colors bg-slate-900/40 hover:bg-slate-900/80 aspect-[16/9] ${
                             isCompressingImage ? "opacity-60 pointer-events-none" : ""
@@ -747,7 +696,7 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                     </div>
 
                     {/* O ingresar URL directa */}
-                    {bannerImageUrls.length < 5 && (
+                    {banners.length < 5 && (
                       <div className="pt-2 border-t border-slate-700/60 flex gap-2">
                         <input
                           type="text"
@@ -791,7 +740,7 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                         type="text"
                         value={bannerTitulo}
                         onChange={(e) => setBannerTitulo(e.target.value)}
-                        placeholder="Ej. ¡Pásate a Fibra Óptica con Instalación Gratis!"
+                        placeholder="Ej. ¡Pásate a Fibra Óptica con Alta Velocidad!"
                         className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
                       />
                     </div>
@@ -850,19 +799,19 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                   <div className="pt-2 flex justify-end">
                     <button
                       type="button"
-                      disabled={isSavingBanner}
-                      onClick={handleSaveBanner}
+                      disabled={isSavingGlobal}
+                      onClick={handleSaveChanges}
                       className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-8 py-3 rounded-2xl text-xs font-bold bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 hover:brightness-110 active:scale-[0.99] disabled:opacity-50 text-slate-950 shadow-lg shadow-amber-500/25 transition-all cursor-pointer"
                     >
-                      {isSavingBanner ? (
+                      {isSavingGlobal ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Guardando en el Servidor...</span>
+                          <span>Guardando en la nube...</span>
                         </>
                       ) : (
                         <>
                           <Check className="w-4 h-4" strokeWidth={2.5} />
-                          <span>Guardar y Publicar Carrusel</span>
+                          <span>Guardar Cambios</span>
                         </>
                       )}
                     </button>
@@ -1079,35 +1028,101 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
           )}
 
           {/* ======================================================== */}
-          {/* TAB 3: INFORMACIÓN COMERCIAL                            */}
+          {/* TAB 3: INFORMACIÓN COMERCIAL Y CANALES DE PAGO           */}
           {/* ======================================================== */}
           {activeTab === "comercial" && (
             <div className="space-y-6">
-              <div className="pb-3 border-b border-slate-800">
-                <h3 className="font-bold text-white text-base">Datos Comerciales y Canales de Pago</h3>
-                <p className="text-xs text-slate-400">
-                  Modifica los números y nombres que se muestran a los abonados en todo el portal
-                </p>
+              <div className="pb-3 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="font-bold text-white text-base">Datos Comerciales y Canales de Pago</h3>
+                  <p className="text-xs text-slate-400">
+                    Sincronizados en tiempo real en Redis para el portal de clientes
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={isSavingGlobal}
+                  onClick={handleSaveChanges}
+                  className="inline-flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all cursor-pointer shadow-md shadow-amber-500/20 self-start sm:self-auto disabled:opacity-50"
+                >
+                  {isSavingGlobal ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  <span>Guardar Cambios</span>
+                </button>
               </div>
 
               <div className="p-6 rounded-2xl bg-slate-800/40 border border-slate-700/60 space-y-5">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                  <div>
-                    <label className="text-xs font-semibold text-slate-300 block mb-1.5">
-                      Nombre Visible de la Empresa
+                  {/* Titular Oficial */}
+                  <div className="sm:col-span-2">
+                    <label className="text-xs font-semibold text-slate-300 block mb-1.5 flex items-center justify-between">
+                      <span>Titular Oficial de las Cuentas Bancarias</span>
+                      <span className="text-[10px] text-amber-400 font-mono">Clave Redis: titular</span>
                     </label>
                     <input
                       type="text"
-                      value={companyName}
-                      onChange={(e) => setCompanyName(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      value={titular}
+                      onChange={(e) => setTitular(e.target.value)}
+                      placeholder="Andrés Aponte / Aponte Plus"
+                      className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Se muestra en comprobantes, modales de pago y canales directos (ej. &quot;Andrés Aponte / Aponte Plus&quot;).
+                    </p>
+                  </div>
+
+                  {/* Canal 1: Nequi */}
+                  <div>
+                    <label className="text-xs font-semibold text-slate-300 block mb-1.5 flex items-center gap-1.5">
+                      <CreditCard className="w-3.5 h-3.5 text-pink-400" />
+                      <span>Número Nequi</span>
+                      <span className="text-[10px] text-slate-400 font-mono ml-auto">canalesPago.nequi</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={nequi}
+                      onChange={(e) => setNequi(e.target.value)}
+                      placeholder="311 276 0959"
+                      className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs sm:text-sm font-mono font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
                     />
                   </div>
 
+                  {/* Canal 2: Bancolombia */}
+                  <div>
+                    <label className="text-xs font-semibold text-slate-300 block mb-1.5 flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Cuenta Bancolombia (Ahorros)</span>
+                      <span className="text-[10px] text-slate-400 font-mono ml-auto">canalesPago.bancolombia</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={bancolombia}
+                      onChange={(e) => setBancolombia(e.target.value)}
+                      placeholder="84758122483"
+                      className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs sm:text-sm font-mono font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+
+                  {/* Canal 3: Bre-B */}
+                  <div>
+                    <label className="text-xs font-semibold text-slate-300 block mb-1.5 flex items-center gap-1.5">
+                      <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Llave Bre-B / Transfiya</span>
+                      <span className="text-[10px] text-slate-400 font-mono ml-auto">canalesPago.breB</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={breB}
+                      onChange={(e) => setBreB(e.target.value)}
+                      placeholder="311 276 0959"
+                      className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs sm:text-sm font-mono font-bold focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+
+                  {/* WhatsApp de Soporte */}
                   <div>
                     <label className="text-xs font-semibold text-slate-300 block mb-1.5 flex items-center gap-1.5">
                       <Phone className="w-3.5 h-3.5 text-emerald-400" />
-                      WhatsApp de Soporte y Cobranzas
+                      <span>WhatsApp de Soporte y Cobranzas</span>
                     </label>
                     <input
                       type="text"
@@ -1118,29 +1133,16 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                     />
                   </div>
 
-                  <div>
-                    <label className="text-xs font-semibold text-slate-300 block mb-1.5 flex items-center gap-1.5">
-                      <CreditCard className="w-3.5 h-3.5 text-pink-400" />
-                      Número Nequi / Llave Bre-B
-                    </label>
-                    <input
-                      type="text"
-                      value={nequiNumber}
-                      onChange={(e) => setNequiNumber(e.target.value)}
-                      placeholder="311 276 0959"
-                      className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-400"
-                    />
-                  </div>
-
-                  <div>
+                  {/* Nombre Visible de la Empresa */}
+                  <div className="sm:col-span-2">
                     <label className="text-xs font-semibold text-slate-300 block mb-1.5">
-                      Titular de la Cuenta Nequi
+                      Nombre Visible de la Empresa
                     </label>
                     <input
                       type="text"
-                      value={accountHolder}
-                      onChange={(e) => setAccountHolder(e.target.value)}
-                      placeholder="Orlando Aponte"
+                      value={companyName}
+                      onChange={(e) => setCompanyName(e.target.value)}
+                      placeholder="Internet Aponte Plus"
                       className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-400"
                     />
                   </div>
@@ -1149,11 +1151,21 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                 <div className="pt-3 border-t border-slate-700/60 flex justify-end">
                   <button
                     type="button"
-                    onClick={handleSaveCompany}
-                    className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all cursor-pointer shadow-md shadow-amber-500/20"
+                    disabled={isSavingGlobal}
+                    onClick={handleSaveChanges}
+                    className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 hover:brightness-110 active:scale-[0.98] text-slate-950 transition-all cursor-pointer shadow-md shadow-amber-500/20 disabled:opacity-50"
                   >
-                    <Check className="w-4 h-4" />
-                    Guardar Datos Comerciales
+                    {isSavingGlobal ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Guardando en la nube...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>Guardar Cambios</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -1165,11 +1177,22 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
           {/* ======================================================== */}
           {activeTab === "alerta" && (
             <div className="space-y-6">
-              <div className="pb-3 border-b border-slate-800">
-                <h3 className="font-bold text-white text-base">Banner de Aviso Global</h3>
-                <p className="text-xs text-slate-400">
-                  Publica un aviso urgente en la cabecera del portal (cortes de fibra, mantenimientos o novedades)
-                </p>
+              <div className="pb-3 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="font-bold text-white text-base">Banner de Aviso Global</h3>
+                  <p className="text-xs text-slate-400">
+                    Publica un aviso urgente en la cabecera del portal (cortes de fibra, mantenimientos o novedades)
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={isSavingGlobal}
+                  onClick={handleSaveChanges}
+                  className="inline-flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all cursor-pointer shadow-md shadow-amber-500/20 self-start sm:self-auto disabled:opacity-50"
+                >
+                  {isSavingGlobal ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  <span>Guardar Cambios</span>
+                </button>
               </div>
 
               {/* Vista Previa del Aviso */}
@@ -1262,11 +1285,21 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                 <div className="pt-3 border-t border-slate-700/60 flex justify-end">
                   <button
                     type="button"
-                    onClick={handleSaveAlert}
-                    className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all cursor-pointer shadow-md shadow-amber-500/20"
+                    disabled={isSavingGlobal}
+                    onClick={handleSaveChanges}
+                    className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 hover:brightness-110 active:scale-[0.98] text-slate-950 transition-all cursor-pointer shadow-md shadow-amber-500/20 disabled:opacity-50"
                   >
-                    <Check className="w-4 h-4" />
-                    Guardar Aviso
+                    {isSavingGlobal ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Guardando en la nube...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>Guardar Cambios</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -1292,13 +1325,34 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
             <span>Restablecer Valores Iniciales</span>
           </button>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-6 py-2.5 rounded-xl font-bold bg-white text-slate-950 hover:bg-slate-200 transition-all cursor-pointer shadow-sm"
-          >
-            Cerrar Panel
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              disabled={isSavingGlobal}
+              onClick={handleSaveChanges}
+              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 hover:brightness-110 active:scale-[0.98] text-slate-950 shadow-md shadow-amber-500/25 cursor-pointer disabled:opacity-50"
+            >
+              {isSavingGlobal ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Guardando en la nube...</span>
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4" strokeWidth={2.5} />
+                  <span>Guardar Cambios</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-5 py-2.5 rounded-xl font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition-all cursor-pointer border border-slate-700"
+            >
+              Cerrar
+            </button>
+          </div>
         </div>
       </div>
     </div>,

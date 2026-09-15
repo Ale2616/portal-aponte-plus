@@ -38,7 +38,7 @@ export interface BrandingConfig {
 
 export const branding: BrandingConfig = {
   companyName: "Internet Aponte Plus",
-  legalName: "Internet Aponte Plus S.A.S.",
+  legalName: "Internet Aponte Plus",
   nit: "901.458.789-2",
   tagline: "Conectándote al Futuro • Internet de Alta Velocidad por Fibra Óptica",
   logoUrl: "/logo.jpg",
@@ -111,7 +111,7 @@ export const branding: BrandingConfig = {
     },
     {
       question: "¿Puedo realizar abonos parciales?",
-      answer: "Sí, puedes ingresar el monto exacto transferido al reportar tu pago. Sin embargo, para levantar una suspensión por mora es necesario saldar el total de la factura vencida."
+      answer: "Sí, puedes ingresar el monto exacto transferido al reportar tu pago. Sin embargo, para levantar una suspensión por mora es necesario saldar el total de la factura pendiente."
     }
   ]
 };

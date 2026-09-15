@@ -38,6 +38,44 @@ export interface HomeAdBanner {
   actualizadoEn?: string;
 }
 
+export interface BannerItem {
+  id: string;
+  url: string;
+  active: boolean;
+}
+
+export interface GlobalSettings {
+  titular: string; // ej. "Andrés Aponte / Aponte Plus"
+  canalesPago: {
+    nequi: string;
+    bancolombia: string;
+    breB: string;
+  };
+  banners: BannerItem[];
+  avisoGlobal: {
+    activo: boolean;
+    texto: string;
+  };
+}
+
+export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
+  titular: "Andrés Aponte / Aponte Plus",
+  canalesPago: {
+    nequi: "311 276 0959",
+    bancolombia: "84758122483",
+    breB: "311 276 0959",
+  },
+  banners: [
+    { id: "banner-1", url: "/banner1.webp", active: true },
+    { id: "banner-2", url: "/banner2.webp", active: true },
+    { id: "banner-3", url: "/banner3.webp", active: true },
+  ],
+  avisoGlobal: {
+    activo: false,
+    texto: "Aviso de mantenimiento programado.",
+  },
+};
+
 export interface PortalConfig {
   companyInfo: CompanyInfo;
   promotions: PromotionItem[];
@@ -49,11 +87,11 @@ export interface PortalConfig {
 export const DEFAULT_CONFIG: PortalConfig = {
   companyInfo: {
     companyName: "Internet Aponte Plus",
-    legalName: "Internet Aponte Plus S.A.S.",
+    legalName: "Internet Aponte Plus",
     supportPhone: "3185577157",
     supportPhoneFormatted: "318 557 7157",
     nequiNumber: "311 276 0959",
-    accountHolder: "Orlando Aponte / Aponte Plus",
+    accountHolder: "Andrés Aponte / Aponte Plus",
   },
   promotions: [
     {

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { formatInvoiceMonth } from "@/lib/utils";
 
 interface WisphubRawInvoice {
   id?: number | string;
@@ -274,7 +275,9 @@ async function handleFacturasQuery(req: NextRequest) {
         const match = desc.match(/Periodo\s+(?:del\s+)?([^\r\n]+)/i);
         if (match) periodoStr = match[1].trim();
       }
-      if (!periodoStr) periodoStr = "Mes en curso";
+      if (!periodoStr || periodoStr.toLowerCase().includes("mes en curso")) {
+        periodoStr = formatInvoiceMonth(periodoStr, raw.fecha_emision || raw.fecha || raw.created_at, dueDateStr);
+      }
 
       // Concepto
       let conceptoStr = raw.concepto || raw.descripcion || "";
@@ -310,7 +313,7 @@ async function handleFacturasQuery(req: NextRequest) {
         impuestos: ivaNum,
         saldoPendiente,
         estado,
-        estadoEtiqueta: isPaid ? "Pagada" : isOverdue ? "Vencida" : "Pendiente",
+        estadoEtiqueta: isPaid ? "Pagada" : "Pendiente",
         concepto: conceptoStr,
         pdfUrl,
         pdfFactura: pdfFactura || pdfUrl,

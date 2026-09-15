@@ -34,7 +34,7 @@ export function SearchScreen({
   onOpenSpeedTest,
 }: SearchScreenProps) {
   const [documento, setDocumento] = useState("");
-  const { config } = useConfig();
+  const { config, globalSettings } = useConfig();
 
   // Puerta Secreta alternativa en el título (5 clics continuos)
   const [secretClicks, setSecretClicks] = useState(0);
@@ -78,9 +78,16 @@ export function SearchScreen({
     ? banner.linkWhatsapp
     : `https://wa.me/${phoneWithCountry || "573185577157"}?text=${encodeURIComponent(promoWhatsappMsg)}`;
 
-  const bannerImages = Array.isArray(banner?.imageUrls)
-    ? banner.imageUrls.filter(Boolean)
-    : banner?.imageUrl
+  const activeBannersFromGlobal = Array.isArray(globalSettings?.banners)
+    ? globalSettings.banners.filter((b) => b.active).map((b) => b.url)
+    : [];
+
+  const bannerImages =
+    activeBannersFromGlobal.length > 0
+      ? activeBannersFromGlobal
+      : Array.isArray(banner?.imageUrls)
+      ? banner.imageUrls.filter(Boolean)
+      : banner?.imageUrl
       ? [banner.imageUrl]
       : [];
 
@@ -178,11 +185,11 @@ export function SearchScreen({
             {isLoading ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" strokeWidth={2.2} />
-                <span>Verificando cliente...</span>
+                <span>Consultando WispHub...</span>
               </>
             ) : (
               <>
-                <span>Ingresar al Portal</span>
+                <span>Consultar mi Servicio</span>
                 <ArrowRight className="w-4 h-4 transition-transform duration-200 group-hover:translate-x-1" strokeWidth={2.2} />
               </>
             )}
@@ -238,14 +245,14 @@ export function SearchScreen({
       {/* Botón Instalación PWA */}
       <InstallPWAButton variant="banner" />
 
-      {/* Acceso Directo y Ayuda */}
+      {/* Acceso Directo por Cédula y Redirección MikroTik */}
       <div className="rounded-2xl p-4 bg-white/70 dark:bg-slate-900/60 backdrop-blur-md border border-slate-200/60 dark:border-slate-800/80 text-xs text-slate-500 dark:text-slate-400 space-y-1">
         <p className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
           <Radio className="w-3.5 h-3.5 text-cyan-500" strokeWidth={2} />
-          ¿Tienes enlace directo o código QR?
+          Acceso Directo por Cédula (Sin Contraseñas ni Registros)
         </p>
         <p className="leading-relaxed">
-          Si accedes desde un mensaje con tu número de documento (<code className="font-sans font-bold tracking-tight tabular-nums text-slate-700 dark:text-slate-300">?cedula=1020304050</code>), ingresarás automáticamente sin digitar.
+          Consulta instantánea conectada a WispHub y MikroTik. Si accedes desde el portal cautivo o un enlace con tu documento (<code className="font-sans font-bold tracking-tight tabular-nums text-slate-700 dark:text-slate-300">?cedula=1020304050</code>), se cargará tu estado automáticamente.
         </p>
       </div>
     </div>
