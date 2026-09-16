@@ -63,12 +63,12 @@ export function StatusCard({ client, onOpenPayment, onOpenBankAccounts, onChange
       )}
 
       {/* Tarjeta Principal Fintech en Verde Aguamarina */}
-      <div className="relative rounded-3xl p-6 sm:p-8 fintech-card-bg text-white shadow-2xl shadow-teal-950/40 border border-teal-500/30 overflow-hidden">
+      <div className="relative rounded-3xl p-5 sm:p-7 fintech-card-bg text-white shadow-2xl shadow-teal-950/40 border border-teal-400/35 overflow-hidden">
         {/* Glow sutil Aguamarina */}
         <div className="absolute -right-16 -top-16 w-64 h-64 rounded-full bg-teal-400/25 blur-3xl pointer-events-none" />
         <div className="absolute -left-16 -bottom-16 w-64 h-64 rounded-full bg-emerald-400/20 blur-3xl pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col justify-between min-h-[210px] sm:min-h-[230px]">
+        <div className="relative z-10 flex flex-col justify-between gap-5 sm:gap-6 min-h-[210px] sm:min-h-[220px]">
           {/* Fila Superior: Chip, Red y Badge de Estado */}
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -105,7 +105,7 @@ export function StatusCard({ client, onOpenPayment, onOpenBankAccounts, onChange
           </div>
 
           {/* Sección Central: Saldo Pendiente y Fecha de Corte */}
-          <div className="my-5">
+          <div className="my-2 sm:my-3">
             <span className="text-[11px] uppercase tracking-widest text-teal-200/80 font-semibold block">
               {hasDebt ? "Saldo Total a Pagar" : "Estado de Cuenta"}
             </span>
@@ -146,18 +146,20 @@ export function StatusCard({ client, onOpenPayment, onOpenBankAccounts, onChange
           </div>
 
           {/* Fila Inferior: Titular y Botones */}
-          <div className="pt-4 border-t border-teal-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="pt-4 border-t border-teal-500/25 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="min-w-0">
-              <span className="text-[10px] uppercase tracking-wider text-teal-200/80 block">
+              <span className="text-[10px] uppercase tracking-wider text-teal-200/80 block font-medium">
                 Titular del Servicio
               </span>
               <p className="text-sm font-bold text-white truncate">
                 {(client.nombreCompleto || "Cliente Registrado").replace(/^Abonado\b/i, "Cliente")}
               </p>
-              <div className="flex flex-wrap items-center gap-2 mt-0.5 text-xs text-teal-200/80">
-                <span className="font-sans font-semibold tracking-tight tabular-nums text-teal-100">
-                  C.C. {client.cedula}
-                </span>
+              <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-teal-200/80">
+                {client.cedula && (
+                  <span className="font-sans font-semibold tracking-tight tabular-nums text-teal-100">
+                    C.C. {client.cedula}
+                  </span>
+                )}
                 {(client.celular || client.telefono) && (
                   <>
                     <span className="text-teal-500/40">•</span>

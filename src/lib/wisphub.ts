@@ -221,12 +221,41 @@ export async function searchWisphubClient(cedula: string): Promise<WisphubClient
     return null;
   }
 
-  // Buscar coincidencia exacta de documento
+  // 1. Buscar coincidencia que contenga el nombre real del titular (evitando alias como negocio, casa, etc.)
+  const titularMatch = results.find((c) => {
+    const n = (c.nombre || c.nombre_completo || "").toLowerCase();
+    const docMatch = String(c.cedula || "").trim() === cleanDoc;
+    return (
+      docMatch &&
+      !n.includes("negocio") &&
+      !n.includes("casa") &&
+      !n.includes("local") &&
+      !n.includes("tienda") &&
+      !n.includes("finca") &&
+      !n.includes("taller") &&
+      !n.includes("oficina")
+    );
+  });
+
+  // 2. Buscar coincidencia exacta de documento
   const exactMatch = results.find(
     (c) => String(c.cedula || "").trim() === cleanDoc
   );
 
-  return exactMatch || results[0];
+  const best = titularMatch || exactMatch || results[0];
+
+  // 3. Si algún registro de esta cédula contiene teléfono o celular, enriquecer el cliente principal
+  const withPhone = results.find((c) => c.telefono || c.celular || c.telefono_referencia);
+  if (best && withPhone) {
+    if (!best.telefono && withPhone.telefono) best.telefono = withPhone.telefono;
+    if (!best.celular && withPhone.celular) best.celular = withPhone.celular;
+  }
+
+  if (best && (!best.cedula || String(best.cedula).trim() === "")) {
+    best.cedula = cleanDoc;
+  }
+
+  return best;
 }
 
 /**
@@ -1378,7 +1407,18 @@ export async function getClientByDocument(
     // Si la API retorna 2 o más servicios/contratos asociados a esa misma cédula:
     // No cargues el primero por defecto. Activa un modal de selección.
     if (!cleanServiceId && services.length >= 2) {
-      const titularNombre = services.find((s) => s.nombre || s.nombre_completo)?.nombre || "";
+      let titularNombre = "";
+      if (cleanDoc) {
+        try {
+          const titularClient = await searchWisphubClient(cleanDoc);
+          if (titularClient && (titularClient.nombre_completo || titularClient.nombre)) {
+            titularNombre = titularClient.nombre_completo || titularClient.nombre || "";
+          }
+        } catch {}
+      }
+      if (!titularNombre) {
+        titularNombre = services.find((s) => s.nombre || s.nombre_completo)?.nombre || "";
+      }
       return {
         success: true,
         multipleServices: true,
@@ -1389,26 +1429,41 @@ export async function getClientByDocument(
 
     // 1. Buscar cliente en WispHub por id_servicio específico o por cédula
     let basicClient: WisphubClientItem | null = null;
+    let titularClient: WisphubClientItem | null = null;
+
+    if (cleanDoc) {
+      try {
+        titularClient = await searchWisphubClient(cleanDoc);
+      } catch {}
+    }
+
     if (cleanServiceId) {
       basicClient = await getWisphubClientDetail(cleanServiceId);
     }
-    if (!basicClient && cleanDoc) {
-      basicClient = await searchWisphubClient(cleanDoc);
+    if (!basicClient && titularClient) {
+      basicClient = titularClient;
     }
 
-    // Si el servicio secundario no contiene el nombre del titular, recuperarlo de la búsqueda por cédula o de los servicios
-    if (basicClient && (!basicClient.nombre && !basicClient.nombre_completo)) {
-      const servicioTitular = services.find((s) => s.nombre || s.nombre_completo);
-      if (servicioTitular && (servicioTitular.nombre || servicioTitular.nombre_completo)) {
-        basicClient.nombre = servicioTitular.nombre || servicioTitular.nombre_completo;
-      } else if (cleanDoc) {
-        try {
-          const titularClient = await searchWisphubClient(cleanDoc);
-          if (titularClient && (titularClient.nombre || titularClient.nombre_completo)) {
-            basicClient.nombre = titularClient.nombre || titularClient.nombre_completo;
-            basicClient.nombre_completo = titularClient.nombre_completo || titularClient.nombre;
-          }
-        } catch {}
+    // Si el servicio secundario no contiene el nombre del titular o cedula, recuperarlo
+    if (basicClient) {
+      if ((!basicClient.cedula || String(basicClient.cedula).trim() === "") && cleanDoc) {
+        basicClient.cedula = cleanDoc;
+      }
+      if (titularClient) {
+        if (!basicClient.cedula && titularClient.cedula) basicClient.cedula = titularClient.cedula;
+        if (!basicClient.telefono && titularClient.telefono) basicClient.telefono = titularClient.telefono;
+        if (!basicClient.celular && titularClient.celular) basicClient.celular = titularClient.celular;
+        
+        const realTitular = titularClient.nombre_completo || titularClient.nombre;
+        if (realTitular && (!basicClient.nombre || !basicClient.nombre_completo || basicClient.nombre.toLowerCase().includes("negocio") || basicClient.nombre.toLowerCase().includes("casa"))) {
+          basicClient.nombre = realTitular;
+          basicClient.nombre_completo = realTitular;
+        }
+      } else {
+        const servicioTitular = services.find((s) => s.nombre || s.nombre_completo);
+        if (servicioTitular && (servicioTitular.nombre || servicioTitular.nombre_completo)) {
+          basicClient.nombre = servicioTitular.nombre || servicioTitular.nombre_completo;
+        }
       }
     }
 
@@ -1433,6 +1488,20 @@ export async function getClientByDocument(
         }
       } catch (err: any) {
         console.warn(`[WispHub] No se pudo obtener detalle extendido para cliente ${detailId}:`, err.message);
+      }
+    }
+
+    // Asegurar que fullClient mantenga cédula y datos de contacto
+    if ((!fullClient.cedula || String(fullClient.cedula).trim() === "") && cleanDoc) {
+      fullClient.cedula = cleanDoc;
+    }
+    if (titularClient) {
+      if (!fullClient.telefono && titularClient.telefono) fullClient.telefono = titularClient.telefono;
+      if (!fullClient.celular && titularClient.celular) fullClient.celular = titularClient.celular;
+      const realTitular = titularClient.nombre_completo || titularClient.nombre;
+      if (realTitular && (!fullClient.nombre || !fullClient.nombre_completo || fullClient.nombre.toLowerCase().includes("negocio") || fullClient.nombre.toLowerCase().includes("casa"))) {
+        fullClient.nombre = realTitular;
+        fullClient.nombre_completo = realTitular;
       }
     }
 
@@ -1467,6 +1536,18 @@ export async function getClientByDocument(
 
     // 5. Mapear a ClientProfile estandarizado
     const profile = mapWisphubClientToProfile(fullClient, invoices, directBalance, trafficData);
+
+    if ((!profile.cedula || profile.cedula.trim() === "") && cleanDoc) {
+      profile.cedula = cleanDoc;
+    }
+    if (titularClient) {
+      if (!profile.telefono && titularClient.telefono) profile.telefono = String(titularClient.telefono).trim();
+      if (!profile.celular && titularClient.celular) profile.celular = String(titularClient.celular).trim();
+      const realTitular = titularClient.nombre_completo || titularClient.nombre;
+      if (realTitular && (!profile.nombreCompleto || profile.nombreCompleto.toLowerCase().includes("negocio") || profile.nombreCompleto.toLowerCase().includes("casa"))) {
+        profile.nombreCompleto = realTitular;
+      }
+    }
 
     return {
       success: true,

@@ -177,6 +177,9 @@ function PortalContent() {
 
         const clienteActivo: ClientProfile = {
           ...data.cliente,
+          cedula: cleanDoc || data.cliente?.cedula || data.cedula || originalClient?.cedula || "",
+          telefono: data.cliente?.telefono || originalClient?.telefono || "",
+          celular: data.cliente?.celular || originalClient?.celular || "",
           nombreCompleto:
             nombreTitular && (!data.cliente?.nombreCompleto || data.cliente.nombreCompleto.toLowerCase().includes("cédula") || data.cliente.nombreCompleto.toLowerCase().includes("cedula"))
               ? nombreTitular
@@ -284,6 +287,9 @@ function PortalContent() {
         const updatedClient: ClientProfile = {
           ...baseClient,
           ...servicioSeleccionado,
+          cedula: targetDoc || baseClient.cedula,
+          telefono: baseClient.telefono || "",
+          celular: baseClient.celular || "",
           nombreCompleto: nombreTitular || baseClient.nombreCompleto,
           direccion: servicioSeleccionado.direccion || baseClient.direccion,
           plan: {
@@ -474,7 +480,7 @@ function PortalContent() {
             onOpenSpeedTest={() => setIsSpeedTestOpen(true)}
           />
         ) : (
-          <div className="space-y-8 animate-in fade-in duration-300">
+          <div className="w-full space-y-6 sm:space-y-8 animate-in fade-in duration-300">
             {/* Mensaje de Confirmación de Pago Exitoso */}
             {paymentReportSuccessData && (
               <div className="rounded-3xl p-5 sm:p-6 bg-emerald-500/10 border border-emerald-500/30 text-emerald-950 dark:text-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg shadow-emerald-950/20 backdrop-blur-xl animate-in zoom-in-95 duration-250 ease-[cubic-bezier(0.165,0.84,0.44,1)]">

@@ -83,25 +83,31 @@ export async function POST(req: NextRequest) {
     );
     const totalPendiente = pendientes.reduce((acc, inv) => acc + (inv.saldoPendiente || inv.total || 0), 0);
 
+    const finalCedula = cliente.cedula || cleanDocument;
+    const finalCliente = {
+      ...cliente,
+      cedula: finalCedula,
+    };
+
     // 3. Respuesta estandarizada para el frontend y campos normalizados requeridos
     return NextResponse.json({
       success: true,
       source: "wisphub_api",
-      cliente,
+      cliente: finalCliente,
       facturas,
       pendientes,
       historial,
       totalPendiente,
       servicios: result.servicios,
-      nombre: cliente.nombreCompleto,
-      cedula: cliente.cedula,
-      usuario: cliente.usuario,
-      plan: cliente.plan.nombre,
-      valor: cliente.plan.precioMensual,
-      estado: cliente.estadoServicio,
-      fecha_corte: cliente.servicio.fechaCorte,
-      saldo_pendiente: cliente.saldoTotalPendiente,
-      ip: cliente.servicio.ip,
+      nombre: finalCliente.nombreCompleto,
+      cedula: finalCedula,
+      usuario: finalCliente.usuario,
+      plan: finalCliente.plan.nombre,
+      valor: finalCliente.plan.precioMensual,
+      estado: finalCliente.estadoServicio,
+      fecha_corte: finalCliente.servicio.fechaCorte,
+      saldo_pendiente: finalCliente.saldoTotalPendiente,
+      ip: finalCliente.servicio.ip,
     });
   } catch (err: any) {
     console.error("[API /cliente/consultar Error]:", err);
