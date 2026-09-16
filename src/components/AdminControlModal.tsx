@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { useConfig, PromotionItem } from "@/context/ConfigContext";
 import { BannerItem, DEFAULT_GLOBAL_SETTINGS } from "@/types/config";
 import { HomeAdCarousel } from "./HomeAdCarousel";
-import { compressImageToDataUrl } from "@/lib/image-compression";
+import { compressImage, compressImageToDataUrl } from "@/lib/image-compression";
 import {
   Sliders,
   Sparkles,
@@ -81,7 +81,7 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
       "Disfruta de la mejor conexión de la región con 100% fibra óptica dedicada."
   );
   const [bannerBotonTexto, setBannerBotonTexto] = useState(
-    config.homeAdBanner?.botonTexto ?? "📲 Preguntar por WhatsApp"
+    (config.homeAdBanner?.botonTexto ?? "Preguntar por WhatsApp").replace(/📲/g, "").replace(/💬/g, "").trim() || "Preguntar por WhatsApp"
   );
   const [bannerWhatsappMensaje, setBannerWhatsappMensaje] = useState(
     config.homeAdBanner?.whatsappMensaje ??
@@ -155,10 +155,7 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
       const newItems: BannerItem[] = [];
       for (let i = 0; i < filesToProcess.length; i++) {
         const file = filesToProcess[i];
-        const compressedBase64 = await compressImageToDataUrl(file, {
-          maxWidth: 1080,
-          quality: 0.75,
-        });
+        const compressedBase64 = await compressImage(file);
         newItems.push({
           id: `banner-${Date.now()}-${i}-${Math.random().toString(36).substring(2, 6)}`,
           url: compressedBase64,
@@ -177,7 +174,7 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
             )}/5)`,
         {
           id: toastId,
-          description: "Redimensionada a máx 1080px (calidad 0.75) para evitar error 413 de Vercel.",
+          description: "Comprimida en Canvas a máx 900px (JPEG 0.75, <150KB) para eliminar error 413 de Vercel.",
         }
       );
     } catch (err: any) {
@@ -335,7 +332,7 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                 descripcion:
                   bannerDescripcion.trim() ||
                   "Disfruta de la mejor conexión de la región con 100% fibra óptica dedicada.",
-                botonTexto: bannerBotonTexto.trim() || "📲 Preguntar por WhatsApp",
+                botonTexto: bannerBotonTexto.replace(/📲/g, "").replace(/💬/g, "").trim() || "Preguntar por WhatsApp",
                 whatsappMensaje: waMsg,
                 linkWhatsapp,
               },
@@ -397,12 +394,26 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
     toast.success("Nueva promoción guardada en el servidor.");
   };
 
+  // Bloqueo estricto del scroll del fondo (body scroll-lock)
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
+
+      return () => {
+        document.body.style.overflow = originalOverflow || "unset";
+        document.documentElement.style.overflow = "";
+      };
+    }
+  }, [isOpen]);
+
   if (!isOpen || !mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 md:p-6 bg-slate-950/85 backdrop-blur-xl animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/70 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
       <div
-        className="relative w-full max-w-5xl h-[92vh] max-h-[860px] flex flex-col rounded-[2rem] bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-slate-700/80 shadow-[0_25px_70px_rgba(0,0,0,0.7)] text-slate-100 overflow-hidden"
+        className="relative w-full max-w-5xl max-h-[90vh] overflow-y-auto overscroll-contain flex flex-col rounded-[2rem] bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-slate-700/80 shadow-[0_25px_70px_rgba(0,0,0,0.7)] text-slate-100"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Glow sutil superior */}
@@ -601,7 +612,7 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                       {banners.map((item, idx) => (
                         <div
                           key={item.id || idx}
-                          className={`relative group rounded-xl overflow-hidden border bg-slate-950 aspect-[16/9] flex items-center justify-center transition-all ${
+                          className={`relative group rounded-xl overflow-hidden border bg-slate-900/60 aspect-[16/9] flex items-center justify-center p-1 transition-all ${
                             item.active ? "border-slate-700" : "border-slate-800 opacity-50"
                           }`}
                         >
@@ -609,7 +620,7 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                           <img
                             src={item.url}
                             alt={`Miniatura ${idx + 1}`}
-                            className="w-full h-full object-cover"
+                            className="max-h-full max-w-full w-auto h-auto object-contain mx-auto pointer-events-none select-none transition-transform duration-200 group-hover:scale-105"
                           />
 
                           {/* Badge de Posición / Principal */}
@@ -681,7 +692,7 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                             {isCompressingImage ? "Comprimiendo..." : "Añadir Foto(s)"}
                           </span>
                           <span className="text-[9px] text-slate-400">
-                            Canvas 1080px (WebP)
+                            Canvas 900px (JPEG &lt;150KB)
                           </span>
                           <input
                             type="file"
@@ -776,7 +787,7 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                         type="text"
                         value={bannerBotonTexto}
                         onChange={(e) => setBannerBotonTexto(e.target.value)}
-                        placeholder="📲 Preguntar por WhatsApp"
+                        placeholder="Preguntar por WhatsApp"
                         className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400"
                       />
                     </div>
@@ -935,14 +946,37 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-slate-300 font-semibold block mb-1">
-                        URL de Imagen (Opcional)
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs text-slate-300 font-semibold block">
+                          Imagen de la Promoción (Opcional)
+                        </label>
+                        <label className="text-[10px] text-amber-400 hover:text-amber-300 cursor-pointer flex items-center gap-1 font-semibold">
+                          <Upload className="w-3 h-3" />
+                          <span>Subir imagen (Canvas &lt;150KB)</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const tid = toast.loading("Comprimiendo imagen con Canvas...");
+                              try {
+                                const compressed = await compressImage(file);
+                                setNewPromo((prev) => ({ ...prev, imagenUrl: compressed }));
+                                toast.success("Imagen de promoción optimizada (<150KB)", { id: tid });
+                              } catch (err: any) {
+                                toast.error("Error al procesar imagen", { id: tid });
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
                       <input
-                        type="url"
+                        type="text"
                         value={newPromo.imagenUrl || ""}
                         onChange={(e) => setNewPromo({ ...newPromo, imagenUrl: e.target.value })}
-                        placeholder="https://..."
+                        placeholder="URL de imagen https:// o sube un archivo..."
                         className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-mono"
                       />
                     </div>

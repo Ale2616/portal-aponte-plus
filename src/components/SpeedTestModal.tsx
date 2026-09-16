@@ -26,6 +26,20 @@ export function SpeedTestModal({ isOpen, onClose }: SpeedTestModalProps) {
     }
   }, [isOpen]);
 
+  // Bloqueo estricto del scroll del fondo (body scroll-lock)
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
+
+      return () => {
+        document.body.style.overflow = originalOverflow || "unset";
+        document.documentElement.style.overflow = "";
+      };
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -40,16 +54,14 @@ export function SpeedTestModal({ isOpen, onClose }: SpeedTestModalProps) {
   if (!isOpen || !mounted) return null;
 
   return createPortal(
-    <>
-      {/* ─── MODAL CONTENEDOR Y BACKDROP ──────────────────────────────────────── */}
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/70 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200"
+      onClick={onClose}
+    >
       <div
-        className="fixed inset-0 z-50 p-2.5 sm:p-6 flex items-center justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
-        onClick={onClose}
+        className="relative w-full max-w-lg sm:max-w-xl md:max-w-[760px] max-h-[90vh] overflow-y-auto overscroll-contain flex flex-col rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl shadow-cyan-950/50 text-white animate-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
       >
-        <div
-          className="relative w-full max-w-lg sm:max-w-xl md:max-w-[760px] max-h-[92dvh] flex flex-col rounded-2xl bg-slate-900 border border-slate-800 overflow-hidden shadow-2xl shadow-cyan-950/50 text-white animate-in zoom-in-95 duration-200"
-          onClick={(e) => e.stopPropagation()}
-        >
           {/* Línea reflectiva superior */}
           <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent pointer-events-none" />
 
@@ -129,10 +141,9 @@ export function SpeedTestModal({ isOpen, onClose }: SpeedTestModalProps) {
             </a>
           </div>
         </div>
-      </div>
-    </>,
-    document.body
-  );
-}
+      </div>,
+      document.body
+    );
+  }
 
 export default SpeedTestModal;

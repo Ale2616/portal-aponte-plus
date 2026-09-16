@@ -194,7 +194,7 @@ export async function GET(
   const total = parseFloat(String(rawTotal || "0").replace(/[^0-9.-]+/g, "")) || 0;
   const saldo = parseFloat(String(rawSaldo || rawTotal || "0").replace(/[^0-9.-]+/g, "")) || 0;
 
-  const nombreDisplay = nombre || "Abonado Registrado";
+  const nombreDisplay = (nombre || "Cliente Registrado").replace(/^Abonado\b/i, "Cliente");
   const cedulaDisplay = cedula || "N/A";
   const direccionDisplay = direccion || (ciudad ? `Curillo, ${ciudad}` : "Curillo, Caquetá");
   const municipioDisplay = "Curillo - Caquetá";

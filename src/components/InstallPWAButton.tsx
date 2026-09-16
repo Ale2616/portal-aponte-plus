@@ -94,11 +94,11 @@ export function InstallPWAButton({ variant = "header" }: { variant?: "header" | 
     return (
       <button
         onClick={handleInstallClick}
-        className="inline-flex items-center justify-center p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
+        className="inline-flex items-center justify-center gap-2 p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
         title="Instalar aplicación en tu dispositivo"
         aria-label="Instalar aplicación"
       >
-        <Download className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" strokeWidth={1.75} />
+        <Download className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 flex-shrink-0" strokeWidth={1.75} />
         <span className="hidden sm:inline">Instalar</span>
       </button>
     );
@@ -123,9 +123,9 @@ export function InstallPWAButton({ variant = "header" }: { variant?: "header" | 
 
       <button
         onClick={handleInstallClick}
-        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white transition-all flex-shrink-0 cursor-pointer"
+        className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white transition-all flex-shrink-0 cursor-pointer"
       >
-        <Download className="w-3.5 h-3.5" strokeWidth={1.75} />
+        <Download className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={1.75} />
         Instalar
       </button>
     </div>

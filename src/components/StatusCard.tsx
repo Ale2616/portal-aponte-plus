@@ -152,7 +152,7 @@ export function StatusCard({ client, onOpenPayment, onOpenBankAccounts, onChange
                 Titular del Servicio
               </span>
               <p className="text-sm font-bold text-white truncate">
-                {client.nombreCompleto}
+                {(client.nombreCompleto || "Cliente Registrado").replace(/^Abonado\b/i, "Cliente")}
               </p>
               <div className="flex flex-wrap items-center gap-2 mt-0.5 text-xs text-teal-200/80">
                 <span className="font-sans font-semibold tracking-tight tabular-nums text-teal-100">

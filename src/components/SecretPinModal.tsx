@@ -34,6 +34,20 @@ export function SecretPinModal({ isOpen, onClose, onSuccess }: SecretPinModalPro
     }
   }, [isOpen]);
 
+  // Bloqueo estricto del scroll del fondo (body scroll-lock)
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
+
+      return () => {
+        document.body.style.overflow = originalOverflow || "unset";
+        document.documentElement.style.overflow = "";
+      };
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -69,25 +83,16 @@ export function SecretPinModal({ isOpen, onClose, onSuccess }: SecretPinModalPro
   };
 
   return createPortal(
-    <>
-      {/* ─── 1. CAPA DE FONDO OSCURO (BACKDROP) ────────────────────── */}
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/70 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200"
+      onClick={onClose}
+    >
       <div
-        className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 animate-in fade-in duration-200"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      {/* ─── 2. CONTENEDOR DEL MODAL CENTRADO ────────────────────────── */}
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4"
-        onClick={onClose}
+        className={`relative w-full max-w-sm max-h-[90vh] overflow-y-auto overscroll-contain rounded-3xl p-6 bg-slate-900 border border-slate-700 shadow-2xl text-white space-y-5 transition-transform animate-in zoom-in-95 duration-200 ${
+          isShake ? "animate-bounce" : ""
+        }`}
+        onClick={(e) => e.stopPropagation()}
       >
-        <div
-          className={`relative w-full max-w-sm rounded-3xl p-6 bg-slate-900 border border-slate-700 shadow-2xl text-white space-y-5 transition-transform animate-in zoom-in-95 duration-200 ${
-            isShake ? "animate-bounce" : ""
-          }`}
-          onClick={(e) => e.stopPropagation()}
-        >
           {/* Botón de Cerrar (X) */}
           <button
             type="button"
@@ -159,8 +164,7 @@ export function SecretPinModal({ isOpen, onClose, onSuccess }: SecretPinModalPro
             </div>
           </form>
         </div>
-      </div>
-    </>,
-    document.body
-  );
-}
+      </div>,
+      document.body
+    );
+  }

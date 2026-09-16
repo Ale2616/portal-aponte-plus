@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { redisGet, redisSet } from "@/lib/redis";
+import { redis, redisGet, redisSet } from "@/lib/redis";
 
 // ─── BLINDAJE CONTRA CACHÉ DE VERCEL / NEXT.JS (OBLIGATORIO) ─────────────────
 export const dynamic = "force-dynamic";
@@ -144,9 +144,9 @@ export async function POST(req: NextRequest) {
       },
     };
 
-    // Guardar en Redis de forma permanente
+    // Guardar en Redis usando await redis.set("isp:global_settings", JSON.stringify(body))
     devLocalFallback = cleanSettings;
-    await redisSet(REDIS_KEY, cleanSettings);
+    await redis.set("isp:global_settings", JSON.stringify(body));
 
     // Invalidar caché de borde en Vercel
     try {

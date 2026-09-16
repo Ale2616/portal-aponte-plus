@@ -136,7 +136,7 @@ export const DEFAULT_CONFIG: PortalConfig = {
     titulo: "¡Pásate a Fibra Óptica con Alta Velocidad!",
     descripcion:
       "Disfruta de la mejor conexión de la región con 100% fibra óptica dedicada y ultra velocidad.",
-    botonTexto: "📲 Preguntar por WhatsApp",
+    botonTexto: "Preguntar por WhatsApp",
     whatsappMensaje:
       "Hola, vi la promoción en el portal y deseo más información sobre el servicio de internet",
     linkWhatsapp:

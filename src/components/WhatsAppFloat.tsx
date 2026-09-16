@@ -33,7 +33,7 @@ export function WhatsAppFloat({ client }: WhatsAppFloatProps) {
         className="pointer-events-auto relative flex items-center justify-center w-13 h-13 sm:w-16 sm:h-16 transition-all duration-300 hover:scale-110 active:scale-95 drop-shadow-[0_8px_20px_rgba(34,197,94,0.35)] hover:drop-shadow-[0_12px_28px_rgba(34,197,94,0.55)] cursor-pointer"
       >
         <Image
-          src="/whatsapp-3d.png"
+          src="/whatsapp-official.png"
           alt="WhatsApp Soporte"
           width={64}
           height={64}

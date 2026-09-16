@@ -94,7 +94,7 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Monitoreo de tráfico real sincronizado con MikroTik WispHub
+              Monitoreo de tráfico real sincronizado con la red central
             </p>
           </div>
         </div>
@@ -114,7 +114,7 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
               Sincronizando consumo con el servidor...
             </p>
             <p className="text-[10px] text-sky-600/70 dark:text-sky-400/70 mt-0.5">
-              Obteniendo datos reales de Traffic Flow desde WispHub
+              Obteniendo datos reales de Traffic Flow del servicio
             </p>
           </div>
         </div>
@@ -222,7 +222,7 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
             </span>
           </p>
           <span className="text-[10px] sm:text-[11px] text-emerald-600 dark:text-emerald-400 font-medium block truncate font-sans tracking-tight tabular-nums">
-            ↑ {consumo.sesionEnVivo?.subida || `${(consumo.consumoHoy?.uploadGb ?? 0).toFixed(1)} GB`} • MikroTik Sync
+            ↑ {consumo.sesionEnVivo?.subida || `${(consumo.consumoHoy?.uploadGb ?? 0).toFixed(1)} GB`} • En Línea
           </span>
         </div>
       </div>
@@ -232,7 +232,7 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
         <div className="flex items-center gap-2.5">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
           <span className="text-slate-700 dark:text-slate-200">
-            <strong>Tráfico MikroTik Sincronizado:</strong> Registros de navegación consolidados directamente en WispHub para el servicio #{client.id}.
+            <strong>Tráfico de Red Sincronizado:</strong> Registros de navegación consolidados directamente en el sistema para el servicio #{client.id}.
           </span>
         </div>
         <div className="flex items-center gap-2 font-sans font-semibold tracking-tight tabular-nums text-[11px] text-slate-500 dark:text-slate-400 self-start sm:self-auto">
@@ -402,7 +402,7 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
             <div className="mt-4 pt-3 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center gap-2 text-xs text-slate-400">
               <Info className="w-3.5 h-3.5 flex-shrink-0 text-slate-400" />
               <span>
-                Datos medidos y sincronizados directamente con WispHub y la cola simple de MikroTik.
+                Datos de consumo medidos y sincronizados directamente con la red de fibra óptica.
               </span>
             </div>
           )}

@@ -163,3 +163,12 @@ export async function redisDel(key: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Cliente helper redis para compatibilidad directa con API upstash
+ */
+export const redis = {
+  get: redisGet,
+  set: (key: string, value: any) => redisSet(key, value),
+  del: redisDel,
+};

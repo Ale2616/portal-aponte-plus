@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
 
     // 1. Extraer el archivo real enviado por el cliente (sin URLs de banner ni imágenes por defecto)
     const file = (formData.get("comprobante") || formData.get("archivo")) as File | null;
-    const nombre = (formData.get("nombre") || formData.get("nombre_cliente") || "Abonado Aponte Plus").toString().trim();
+    const nombre = (formData.get("nombre") || formData.get("nombre_cliente") || "Cliente Aponte Plus").toString().replace(/^Abonado\b/i, "Cliente").trim();
     const cedula = (formData.get("cedula") || formData.get("cedula_cliente") || formData.get("id_cliente") || "").toString().trim();
     const plan = (formData.get("plan") || formData.get("plan_cliente") || "Plan Fibra Óptica").toString().trim();
     const montoRaw = (formData.get("monto") || "0").toString().trim();
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
 🔖 <b>Referencia:</b> ${referencia || "Ver imagen adjunta"}
 📅 <b>Fecha:</b> ${fechaActual}
 ━━━━━━━━━━━━━━━━━━━━
-<i>Verificar comprobante adjunto y aplicar en WispHub.</i>`;
+<i>Verificar comprobante adjunto y aplicar en el sistema de gestión.</i>`;
 
     // 4. Despacho a Telegram como binario real
     const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN;

@@ -333,6 +333,20 @@ export function PaymentModal({
     }
   };
 
+  // Bloqueo estricto del scroll del fondo (body scroll-lock)
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
+
+      return () => {
+        document.body.style.overflow = originalOverflow || "unset";
+        document.documentElement.style.overflow = "";
+      };
+    }
+  }, [isOpen]);
+
   const handleModalClose = () => {
     reset();
     setSelectedFile(null);
@@ -342,9 +356,9 @@ export function PaymentModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/70 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
       <div
-        className="relative w-full max-w-xl max-h-[92vh] flex flex-col rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden"
+        className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto overscroll-contain flex flex-col rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
@@ -403,9 +417,9 @@ export function PaymentModal({
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Abonado:</span>
+                  <span className="text-slate-400">Cliente:</span>
                   <span className="text-slate-800 dark:text-slate-200 truncate max-w-[200px]">
-                    {client.nombreCompleto}
+                    {client.nombreCompleto?.replace(/^Abonado\b/i, "Cliente")}
                   </span>
                 </div>
                 <div className="flex justify-between">

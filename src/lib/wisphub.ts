@@ -153,7 +153,7 @@ export async function fetchWisphub<T = any>(
 ): Promise<T> {
   const apiKey = process.env.WISPHUB_API_KEY;
   if (!apiKey || apiKey.trim() === "") {
-    throw new Error("Error de sincronización con WispHub: Credenciales (WISPHUB_API_KEY) no configuradas en el servidor.");
+    throw new Error("Error de sincronización con el servidor: Credenciales no configuradas en el servidor.");
   }
 
   const url = buildWisphubUrl(endpoint);
@@ -175,14 +175,14 @@ export async function fetchWisphub<T = any>(
 
     if (!response.ok) {
       if (response.status === 401 || response.status === 403) {
-        throw new Error(`Error de sincronización con WispHub: Credenciales no autorizadas o permisos insuficientes (HTTP ${response.status}).`);
+        throw new Error(`Error de sincronización con el servidor: Credenciales no autorizadas o permisos insuficientes (HTTP ${response.status}).`);
       }
       if (response.status === 404) {
-        const error: any = new Error("Error de sincronización con WispHub: Recurso no encontrado en el servidor (HTTP 404).");
+        const error: any = new Error("Error de sincronización con el servidor: Recurso no encontrado en el servidor (HTTP 404).");
         error.status = 404;
         throw error;
       }
-      throw new Error(`Error de sincronización con WispHub: Servidor remoto respondió con estado HTTP ${response.status}.`);
+      throw new Error(`Error de sincronización con el servidor: Servidor remoto respondió con estado HTTP ${response.status}.`);
     }
 
     const data = await response.json();
@@ -190,12 +190,12 @@ export async function fetchWisphub<T = any>(
   } catch (err: any) {
     clearTimeout(timeoutId);
     if (err.name === "AbortError") {
-      throw new Error("Error de sincronización con WispHub: Tiempo de espera agotado al conectar con el servidor.");
+      throw new Error("Error de sincronización con el servidor: Tiempo de espera agotado al conectar con el servidor.");
     }
-    if (err.message && err.message.startsWith("Error de sincronización con WispHub")) {
+    if (err.message && err.message.startsWith("Error de sincronización con el servidor")) {
       throw err;
     }
-    throw new Error(`Error de sincronización con WispHub: No fue posible comunicar con el servicio (${err.message || "Fallo de conexión"}).`);
+    throw new Error(`Error de sincronización con el servidor: No fue posible comunicar con el servicio (${err.message || "Fallo de conexión"}).`);
   }
 }
 
@@ -227,6 +227,155 @@ export async function searchWisphubClient(cedula: string): Promise<WisphubClient
   );
 
   return exactMatch || results[0];
+}
+
+/**
+ * Sanitiza cualquier texto que venga de WispHub para eliminar etiquetas HTML (<p>, <div>), entidades y espacios raros.
+ */
+export const limpiarTexto = (texto: any): string => {
+  if (!texto) return "";
+  return String(texto)
+    .replace(/<[^>]*>?/gm, "") // Borra etiquetas <p>, <div>, etc.
+    .replace(/&nbsp;/g, " ")   // Borra espacios HTML
+    .trim();
+};
+
+export interface WisphubServiceSummary {
+  idServicio: string;
+  id_servicio?: string;
+  id?: string;
+  idCliente?: string;
+  nombre?: string;
+  nombre_completo?: string;
+  direccion: string;
+  alias?: string;
+  planNombre: string;
+  plan_internet?: string;
+  plan?: string;
+  estado: string;
+  ip?: string;
+  nodo?: string;
+}
+
+/**
+ * Busca todos los servicios / contratos asociados a un número de documento en WispHub.
+ * PROHIBIDO usar comentarios, notas técnicas o credenciales internas.
+ * Mapea la dirección oficial / alias, titular, ID y plan contratado.
+ */
+export async function searchWisphubServicesByDocument(cedula: string): Promise<WisphubServiceSummary[]> {
+  const cleanDoc = cedula.trim();
+  if (!cleanDoc) return [];
+
+  const data = await fetchWisphub<any>(`/api/clientes/?cedula=${encodeURIComponent(cleanDoc)}`);
+
+  const results: WisphubClientItem[] = Array.isArray(data?.results)
+    ? data.results
+    : Array.isArray(data)
+    ? data
+    : data?.id
+    ? [data]
+    : [];
+
+  if (results.length === 0) return [];
+
+  const summaries: WisphubServiceSummary[] = [];
+
+  for (const item of results) {
+    // Si el item tiene un arreglo interno de servicios (servicios: [...])
+    if (Array.isArray(item.servicios) && item.servicios.length > 1) {
+      for (const s of item.servicios) {
+        const sId = String(s.id_servicio || s.id || item.id_servicio || item.id || "");
+        const dir = limpiarTexto(s.direccion || item.direccion || item.direccion_completa || "Dirección Registrada");
+        const alias = limpiarTexto(s.nombre || s.alias || dir);
+        const titular = limpiarTexto(s.nombre || s.nombre_completo || item.nombre || item.nombre_completo || "");
+        
+        let plan = "Fibra Óptica";
+        if (s.plan_internet && typeof s.plan_internet === "object") {
+          plan = limpiarTexto(extractSafeString(s.plan_internet.nombre, plan));
+        } else if (typeof s.plan_internet === "string") {
+          plan = limpiarTexto(extractSafeString(s.plan_internet, plan));
+        } else if (s.plan_nombre || s.plan) {
+          plan = limpiarTexto(extractSafeString(s.plan_nombre || s.plan, plan));
+        }
+
+        const rawEst = String(s.estado ?? item.estado ?? "activo").toLowerCase();
+        const estado = rawEst.includes("cort") || rawEst === "2"
+          ? "Suspendido"
+          : rawEst.includes("susp") || rawEst === "3"
+          ? "Suspendido"
+          : "Activo";
+
+        summaries.push({
+          idServicio: sId,
+          id_servicio: sId,
+          id: sId,
+          idCliente: String(item.id || sId),
+          nombre: titular,
+          nombre_completo: titular,
+          direccion: dir.replace(/\r\n|\r|\n/g, " - ").replace(/\s{2,}/g, " ").trim(),
+          alias: alias.replace(/\r\n|\r|\n/g, " - ").replace(/\s{2,}/g, " ").trim(),
+          planNombre: plan,
+          plan_internet: plan,
+          plan,
+          estado,
+          ip: s.ip || item.ip,
+          nodo: limpiarTexto(extractSafeString(s.nodo || item.nodo)),
+        });
+      }
+    } else {
+      const sId = String(item.id_servicio || item.id || "");
+      const dir = limpiarTexto(
+        item.direccion || item.direccion_completa || item.barrio || item.ciudad || "Dirección Registrada"
+      );
+      const alias = limpiarTexto(
+        item.nombre_comercial || item.alias || item.barrio || dir
+      );
+      const titular = limpiarTexto(
+        item.nombre || item.nombre_completo || ""
+      );
+
+      let plan = "Fibra Óptica";
+      if (item.plan_internet && typeof item.plan_internet === "object") {
+        plan = limpiarTexto(extractSafeString(item.plan_internet.nombre, plan));
+      } else if (typeof item.plan_internet === "string") {
+        plan = limpiarTexto(extractSafeString(item.plan_internet, plan));
+      } else if (item.plan_nombre || item.plan) {
+        plan = limpiarTexto(extractSafeString(item.plan_nombre || item.plan, plan));
+      }
+
+      const rawEst = String(item.estado ?? "activo").toLowerCase();
+      const estado = rawEst.includes("cort") || rawEst === "2"
+        ? "Suspendido"
+        : rawEst.includes("susp") || rawEst === "3"
+        ? "Suspendido"
+        : "Activo";
+
+      summaries.push({
+        idServicio: sId,
+        id_servicio: sId,
+        id: sId,
+        idCliente: String(item.id || sId),
+        nombre: titular,
+        nombre_completo: titular,
+        direccion: dir.replace(/\r\n|\r|\n/g, " - ").replace(/\s{2,}/g, " ").trim(),
+        alias: alias.replace(/\r\n|\r|\n/g, " - ").replace(/\s{2,}/g, " ").trim(),
+        planNombre: plan,
+        plan_internet: plan,
+        plan,
+        estado,
+        ip: item.ip,
+        nodo: limpiarTexto(extractSafeString(item.nodo)),
+      });
+    }
+  }
+
+  // Deduplicar por idServicio
+  const seen = new Set<string>();
+  return summaries.filter((s) => {
+    if (!s.idServicio || seen.has(s.idServicio)) return false;
+    seen.add(s.idServicio);
+    return true;
+  });
 }
 
 /**
@@ -912,7 +1061,7 @@ export function mapWisphubClientToProfile(
     extractSafeString(raw.nombre_completo) ||
     [extractSafeString(raw.nombre), extractSafeString(raw.apellidos)].filter(Boolean).join(" ").trim() ||
     extractSafeString(raw.nombre) ||
-    `Abonado Cédula ${cedulaStr}`;
+    `Cliente Cédula ${cedulaStr}`;
 
   // Estado del servicio
   const rawEstado = String(raw.estado ?? "activo").toLowerCase().trim();
@@ -1194,17 +1343,27 @@ export async function getWisphubServiceUsage(
 }
 
 /**
- * Consulta un abonado en WispHub por su documento de identidad
+ * Consulta un abonado en WispHub por su documento de identidad y/o id_servicio.
+ * Si tiene 2 o más servicios asociados y no se especificó id_servicio, devuelve la lista
+ * de servicios para activar el modal de selección.
  */
-export async function getClientByDocument(documento: string): Promise<{
+export async function getClientByDocument(
+  documento: string,
+  targetServiceId?: string | null
+): Promise<{
   success: boolean;
   cliente?: ClientProfile;
   facturas?: Invoice[];
+  multipleServices?: boolean;
+  servicios?: WisphubServiceSummary[];
+  nombre?: string;
   error?: string;
   statusCode?: number;
 }> {
-  const cleanDoc = documento.trim();
-  if (!cleanDoc) {
+  const cleanDoc = documento ? documento.trim() : "";
+  const cleanServiceId = targetServiceId ? String(targetServiceId).trim() : null;
+
+  if (!cleanDoc && !cleanServiceId) {
     return {
       success: false,
       error: "El número de documento es obligatorio.",
@@ -1213,29 +1372,67 @@ export async function getClientByDocument(documento: string): Promise<{
   }
 
   try {
-    // 1. Buscar abonado en WispHub por cédula
-    const basicClient = await searchWisphubClient(cleanDoc);
+    // 0. Si no viene targetServiceId, verificar cuántos servicios/líneas tiene el abonado
+    const services = cleanDoc ? await searchWisphubServicesByDocument(cleanDoc) : [];
+
+    // Si la API retorna 2 o más servicios/contratos asociados a esa misma cédula:
+    // No cargues el primero por defecto. Activa un modal de selección.
+    if (!cleanServiceId && services.length >= 2) {
+      const titularNombre = services.find((s) => s.nombre || s.nombre_completo)?.nombre || "";
+      return {
+        success: true,
+        multipleServices: true,
+        servicios: services,
+        nombre: titularNombre,
+      };
+    }
+
+    // 1. Buscar cliente en WispHub por id_servicio específico o por cédula
+    let basicClient: WisphubClientItem | null = null;
+    if (cleanServiceId) {
+      basicClient = await getWisphubClientDetail(cleanServiceId);
+    }
+    if (!basicClient && cleanDoc) {
+      basicClient = await searchWisphubClient(cleanDoc);
+    }
+
+    // Si el servicio secundario no contiene el nombre del titular, recuperarlo de la búsqueda por cédula o de los servicios
+    if (basicClient && (!basicClient.nombre && !basicClient.nombre_completo)) {
+      const servicioTitular = services.find((s) => s.nombre || s.nombre_completo);
+      if (servicioTitular && (servicioTitular.nombre || servicioTitular.nombre_completo)) {
+        basicClient.nombre = servicioTitular.nombre || servicioTitular.nombre_completo;
+      } else if (cleanDoc) {
+        try {
+          const titularClient = await searchWisphubClient(cleanDoc);
+          if (titularClient && (titularClient.nombre || titularClient.nombre_completo)) {
+            basicClient.nombre = titularClient.nombre || titularClient.nombre_completo;
+            basicClient.nombre_completo = titularClient.nombre_completo || titularClient.nombre;
+          }
+        } catch {}
+      }
+    }
 
     if (!basicClient) {
       return {
         success: false,
-        error: "Abonado no encontrado. Por favor verifica el número de documento e intenta de nuevo.",
+        error: "Cliente no encontrado. Por favor verifica el número de documento e intenta de nuevo.",
         statusCode: 404,
       };
     }
 
-    const serviceId = basicClient.id_servicio || basicClient.id;
+    const serviceId = cleanServiceId || basicClient.id_servicio || basicClient.id;
 
     // 2. Obtener detalle exhaustivo del cliente si tiene ID
     let fullClient = basicClient;
-    if (basicClient.id) {
+    const detailId = cleanServiceId || basicClient.id;
+    if (detailId) {
       try {
-        const detailed = await getWisphubClientDetail(basicClient.id);
+        const detailed = await getWisphubClientDetail(detailId);
         if (detailed) {
           fullClient = { ...basicClient, ...detailed };
         }
       } catch (err: any) {
-        console.warn(`[WispHub] No se pudo obtener detalle extendido para cliente ${basicClient.id}:`, err.message);
+        console.warn(`[WispHub] No se pudo obtener detalle extendido para cliente ${detailId}:`, err.message);
       }
     }
 
@@ -1275,6 +1472,8 @@ export async function getClientByDocument(documento: string): Promise<{
       success: true,
       cliente: profile,
       facturas: invoices,
+      multipleServices: false,
+      servicios: services.length > 0 ? services : undefined,
     };
   } catch (err: any) {
     console.error("[WispHub API Error in getClientByDocument]:", err);

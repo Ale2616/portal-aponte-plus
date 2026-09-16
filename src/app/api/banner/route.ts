@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
       imageUrls,
       titulo: (bannerData.titulo || "¡Pásate a Fibra Óptica con Alta Velocidad!").toString().trim(),
       descripcion: (bannerData.descripcion || "Disfruta de la mejor conexión de la región con 100% fibra óptica dedicada.").toString().trim(),
-      botonTexto: (bannerData.botonTexto || "📲 Preguntar por WhatsApp").toString().trim(),
+      botonTexto: (bannerData.botonTexto || "Preguntar por WhatsApp").toString().replace(/📲/g, "").replace(/💬/g, "").trim() || "Preguntar por WhatsApp",
       whatsappMensaje: (bannerData.whatsappMensaje || "Hola, vi la promoción en el portal...").toString().trim(),
       linkWhatsapp: bannerData.linkWhatsapp || undefined,
       actualizadoEn: new Date().toISOString(),

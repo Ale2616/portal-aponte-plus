@@ -46,7 +46,7 @@ export const branding: BrandingConfig = {
   supportPhoneFormatted: "318 557 7157",
   supportEmail: "soporte@internetaponteplus.com",
   supportHours: "Lunes a Sábado de 7:00 AM a 8:00 PM | Domingos 8:00 AM a 2:00 PM",
-  address: "Sede Principal de Atención al Abonado",
+  address: "Sede Principal de Atención al Cliente",
   city: "Colombia",
   primaryColor: "#0284c7",
   accentColor: "#10b981",

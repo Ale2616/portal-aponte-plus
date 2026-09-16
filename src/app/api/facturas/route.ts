@@ -74,7 +74,7 @@ async function handleFacturasQuery(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "Error de sincronización con WispHub: Credenciales (WISPHUB_API_KEY) no configuradas en el servidor.",
+          error: "Error de sincronización con el servidor: Credenciales no configuradas en el servidor.",
         },
         { status: 500 }
       );
@@ -354,7 +354,7 @@ async function handleFacturasQuery(req: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: "Error de sincronización con WispHub: No fue posible consultar el historial de facturas.",
+        error: "Error de sincronización con el servidor: No fue posible consultar el historial de facturas.",
       },
       { status: 502 }
     );

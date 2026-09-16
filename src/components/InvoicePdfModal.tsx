@@ -164,6 +164,20 @@ export function InvoicePdfModal({
   const brebNumber =
     globalSettings?.canalesPago?.breB || "311 276 0959";
 
+  // Bloqueo estricto del scroll del fondo (body scroll-lock)
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
+
+      return () => {
+        document.body.style.overflow = originalOverflow || "unset";
+        document.documentElement.style.overflow = "";
+      };
+    }
+  }, [isOpen]);
+
   const handlePrint = () => {
     window.print();
   };
@@ -171,7 +185,7 @@ export function InvoicePdfModal({
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-hidden overscroll-none animate-in fade-in duration-200 print:static print:p-0 print:bg-transparent print:backdrop-blur-none print:block"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/70 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200 print:static print:p-0 print:bg-transparent print:backdrop-blur-none print:block"
     >
       {/* ─── AISLAMIENTO ESTRICTO DE IMPRESIÓN (1 SOLA PÁGINA) ─── */}
       <style
@@ -239,7 +253,7 @@ export function InvoicePdfModal({
 
       {/* Contenedor Modal */}
       <div
-        className="relative w-full max-w-[820px] max-h-[95vh] flex flex-col rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden print:static print:max-w-none print:max-h-none print:bg-transparent print:border-none print:shadow-none print:overflow-visible"
+        className="relative w-full max-w-[820px] max-h-[90vh] overflow-y-auto overscroll-contain flex flex-col rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl print:static print:max-w-none print:max-h-none print:bg-transparent print:border-none print:shadow-none print:overflow-visible"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Top Bar (Oculto en Impresión) */}
@@ -307,8 +321,8 @@ export function InvoicePdfModal({
               </div>
             </div>
 
-            {/* Cajas de Información en 2 Columnas Compactas (Arrancan inmediatamente debajo del membrete) */}
-            <div className="grid grid-cols-2 gap-4 mt-0 mb-2 text-xs leading-relaxed">
+            {/* Cajas de Información en 1 columna en móvil (<640px) y 2 columnas en PC / Impresión */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-3 sm:gap-4 mt-0 mb-2 text-xs leading-relaxed">
               {/* Caja 1: ADQUIRENTE / CLIENTE */}
               <div className="bg-slate-50/50 border border-slate-200 rounded-lg p-2.5 space-y-1">
                 <div className="font-bold text-slate-900 uppercase text-[10px] tracking-wider mb-1 pb-0.5 border-b border-slate-200">
@@ -316,7 +330,7 @@ export function InvoicePdfModal({
                 </div>
                 <div>
                   <span className="font-semibold text-slate-700">Nombre: </span>
-                  <span className="text-slate-900 font-medium">{client?.nombreCompleto || "Abonado Registrado"}</span>
+                  <span className="text-slate-900 font-medium">{(client?.nombreCompleto || "Cliente Registrado").replace(/^Abonado\b/i, "Cliente")}</span>
                 </div>
                 <div>
                   <span className="font-semibold text-slate-700">Cédula / NIT: </span>
@@ -365,9 +379,9 @@ export function InvoicePdfModal({
               </div>
             </div>
 
-            {/* Tabla de Cobro Directa */}
-            <div className="border border-slate-300 rounded-lg overflow-hidden mt-2 mb-2">
-              <table className="w-full text-left border-collapse table-fixed">
+            {/* Tabla de Cobro Directa (con scroll defensivo en pantallas < 380px, intacta en PC y print) */}
+            <div className="border border-slate-300 rounded-lg overflow-x-auto print:overflow-visible mt-2 mb-2">
+              <table className="w-full text-left border-collapse table-fixed min-w-[340px] sm:min-w-0">
                 <thead className="bg-slate-100 font-bold text-[10px] uppercase text-slate-700 py-1.5 px-3 border-b border-slate-300">
                   <tr>
                     <th className="py-1.5 px-2 text-center w-[8%]">ÍTEM</th>
@@ -401,13 +415,13 @@ export function InvoicePdfModal({
               </table>
             </div>
 
-            {/* Zona Inferior: Canales de Pago a la Izquierda y Total Directo a la Derecha */}
-            <div className="flex justify-between items-center gap-4 my-2.5 pt-1">
+            {/* Zona Inferior: Canales de Pago y Total Directo (apilado vertical en móvil, horizontal en PC e impresión) */}
+            <div className="flex flex-col sm:flex-row print:flex-row justify-between items-start sm:items-center print:items-center gap-3 sm:gap-4 my-2.5 pt-1">
               {/* Izquierda: Canales de Pago con Iconos (Bre-B debajo de Nequi) */}
-              <div className="flex items-start gap-2 text-[11px] text-slate-700">
+              <div className="flex items-start gap-2 text-[11px] text-slate-700 w-full sm:w-auto print:w-auto">
                 <span className="font-bold pt-0.5 flex-shrink-0">Canales de Pago:</span>
                 <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap sm:flex-nowrap print:flex-nowrap items-center gap-2">
                     <span className="inline-flex items-center gap-1">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
@@ -417,7 +431,7 @@ export function InvoicePdfModal({
                       />
                       <span>Nequi: <strong className="font-sans tabular-nums font-bold text-slate-900 tracking-tight">{nequiNumber}</strong></span>
                     </span>
-                    <span className="text-slate-300">•</span>
+                    <span className="text-slate-300 hidden sm:inline print:inline">•</span>
                     <span className="inline-flex items-center gap-1">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
@@ -442,8 +456,8 @@ export function InvoicePdfModal({
                 </div>
               </div>
 
-              {/* Derecha: Recuadro simple con TOTAL */}
-              <div className="bg-slate-100 border border-slate-300 rounded-lg px-4 py-2 flex items-center gap-2.5 flex-shrink-0">
+              {/* Derecha: Recuadro simple con TOTAL (ancho completo en móvil con distribución balanceada, auto en PC e impresión) */}
+              <div className="w-full sm:w-auto print:w-auto bg-slate-100 border border-slate-300 rounded-lg px-4 py-2 flex items-center justify-between sm:justify-start print:justify-start gap-2.5 flex-shrink-0">
                 <span className="font-bold text-slate-800 text-xs uppercase tracking-wide">
                   {isPaid ? "TOTAL PAGADO:" : "TOTAL A PAGAR:"}
                 </span>

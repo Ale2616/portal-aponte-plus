@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "Debe proporcionar el 'id_servicio' o el número de 'cedula' del abonado.",
+          error: "Debe proporcionar el 'id_servicio' o el número de 'cedula' del cliente.",
         },
         { status: 400 }
       );
@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
 
     if (!resolvedServiceId) {
       return NextResponse.json(
-        { success: false, error: "No se encontró el servicio del abonado." },
+        { success: false, error: "No se encontró el servicio del cliente." },
         { status: 404 }
       );
     }
@@ -134,7 +134,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: error.message || "Error al obtener el consumo de red del abonado.",
+        error: error.message || "Error al obtener el consumo de red del cliente.",
         syncStatus: "sync_failed",
       },
       { status: 503 }
@@ -154,7 +154,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "Debe proporcionar el 'id_servicio' o el número de 'cedula' del abonado.",
+          error: "Debe proporcionar el 'id_servicio' o el número de 'cedula' del cliente.",
         },
         { status: 400 }
       );
@@ -174,7 +174,7 @@ export async function POST(req: NextRequest) {
 
     if (!resolvedServiceId) {
       return NextResponse.json(
-        { success: false, error: "No se encontró el servicio del abonado." },
+        { success: false, error: "No se encontró el servicio del cliente." },
         { status: 404 }
       );
     }
@@ -230,7 +230,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: error.message || "Error al obtener el consumo de red del abonado.",
+        error: error.message || "Error al obtener el consumo de red del cliente.",
         syncStatus: "sync_failed",
       },
       { status: 503 }

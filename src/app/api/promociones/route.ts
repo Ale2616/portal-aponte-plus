@@ -20,7 +20,7 @@ const DEFAULT_PROMO: PromocionGlobal = {
   imageUrls: ["/banner-promo-fibra.jpg"],
   titulo: "¡Pásate a Fibra Óptica con Alta Velocidad!",
   descripcion: "Disfruta de la mejor conexión de la región con 100% fibra óptica dedicada y ultra velocidad.",
-  botonTexto: "📲 Preguntar por WhatsApp",
+  botonTexto: "Preguntar por WhatsApp",
   linkWhatsapp: "https://wa.me/573185577157?text=Hola%2C%20vi%20la%20promoci%C3%B3n%20en%20el%20portal%20y%20deseo%20m%C3%A1s%20informaci%C3%B3n%20sobre%20el%20servicio%20de%20internet",
   activa: true,
   actualizadoEn: new Date().toISOString(),

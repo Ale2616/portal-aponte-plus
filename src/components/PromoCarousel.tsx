@@ -15,7 +15,7 @@ import {
 
 export function PromoCarousel() {
   const { config } = useConfig();
-  const promotions = (config.promotions || []).filter((p) => p.activo !== false);
+  const promotions = (config.promotions || []).filter((p) => p.activo === true);
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
@@ -101,13 +101,25 @@ export function PromoCarousel() {
     >
       {/* Banner Card */}
       <div
-        className={`relative overflow-hidden rounded-3xl p-5 sm:p-7 text-white shadow-xl transition-all duration-500 bg-gradient-to-r ${currentPromo.gradiente} border border-white/15`}
+        className={`relative overflow-hidden rounded-3xl text-white shadow-xl transition-all duration-500 bg-gradient-to-r ${currentPromo.gradiente} border border-white/15`}
       >
+        {/* Foto de la promoción si existe, separada del texto */}
+        {currentPromo.imagenUrl && (
+          <div className="w-full h-[380px] sm:h-[480px] md:h-[540px] bg-black/15 dark:bg-black/25 backdrop-blur-xs flex items-center justify-center overflow-hidden rounded-t-3xl relative p-1 sm:p-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={currentPromo.imagenUrl}
+              alt={currentPromo.titulo}
+              className="max-h-full max-w-full object-contain mx-auto pointer-events-none select-none"
+            />
+          </div>
+        )}
+
         {/* Glow Effects de fondo */}
         <div className="absolute -right-12 -top-12 w-48 h-48 rounded-full bg-white/10 blur-2xl pointer-events-none" />
         <div className="absolute -left-12 -bottom-12 w-48 h-48 rounded-full bg-black/15 blur-2xl pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
+        <div className="p-5 sm:p-7 pb-4 sm:pb-5 relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
           <div className="space-y-2.5 max-w-xl">
             {/* Tag Badge */}
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase bg-black/25 backdrop-blur-md border border-white/20 text-white/90 shadow-sm">
@@ -139,8 +151,8 @@ export function PromoCarousel() {
           </div>
         </div>
 
-        {/* Indicadores de Páginas (Dots) y Flechas */}
-        <div className="relative z-10 flex items-center justify-between pt-4 mt-2 border-t border-white/10">
+        {/* Indicadores de Páginas (Dots) y Flechas con padding horizontal y vertical equilibrado */}
+        <div className="relative z-10 flex items-center justify-between px-5 sm:px-7 pb-4 sm:pb-5 pt-3.5 border-t border-white/10">
           <div className="flex items-center gap-1.5">
             {promotions.map((_, idx) => (
               <button
@@ -150,24 +162,24 @@ export function PromoCarousel() {
                 className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
                   safeIndex === idx
                     ? "w-7 bg-white shadow-sm"
-                    : "w-2 bg-white/40 hover:bg-white/60"
+                    : "w-2 bg-white/40 hover:bg-white/70"
                 }`}
               />
             ))}
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             <button
               onClick={prevSlide}
               aria-label="Promoción anterior"
-              className="p-1.5 rounded-xl bg-black/20 hover:bg-black/35 backdrop-blur-sm text-white/90 hover:text-white transition-all cursor-pointer"
+              className="p-1.5 sm:p-2 rounded-xl bg-black/25 hover:bg-black/40 active:scale-95 backdrop-blur-sm text-white/90 hover:text-white transition-all cursor-pointer shadow-sm border border-white/10"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
               onClick={nextSlide}
               aria-label="Promoción siguiente"
-              className="p-1.5 rounded-xl bg-black/20 hover:bg-black/35 backdrop-blur-sm text-white/90 hover:text-white transition-all cursor-pointer"
+              className="p-1.5 sm:p-2 rounded-xl bg-black/25 hover:bg-black/40 active:scale-95 backdrop-blur-sm text-white/90 hover:text-white transition-all cursor-pointer shadow-sm border border-white/10"
             >
               <ChevronRight className="w-4 h-4" />
             </button>

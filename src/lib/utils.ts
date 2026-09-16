@@ -188,7 +188,7 @@ export function buildWhatsAppUrl(
   const cleanPhone = phone.replace(/\D/g, "") || "573185577157";
   let message = "Hola Internet Aponte Plus, necesito soporte con mi servicio";
   if (clientName && documentNumber) {
-    message += ` (Abonado: ${clientName} - Cédula: ${documentNumber})`;
+    message += ` (Cliente: ${clientName} - Cédula: ${documentNumber})`;
   }
   if (extraContext) {
     message += ` - ${extraContext}`;

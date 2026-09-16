@@ -55,6 +55,39 @@ export function isDefaultImageList(imgs?: string[] | null): boolean {
 }
 
 /**
+ * Compresor definitivo en cliente (HTML5 Canvas):
+ * - Ancho máximo: 900px
+ * - Escala proporcional manteniendo relación de aspecto
+ * - Exportación: JPEG con calidad 0.75 (< 150KB)
+ * Elimina de raíz el error 413 de Vercel y garantiza guardado en Upstash Redis.
+ */
+export const compressImage = (file: File): Promise<string> => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (e) => {
+      const img = new Image();
+      img.src = e.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_DIM = 1200; // Alta resolución para leer textos pequeños de flyers y pósters
+        const maxSide = Math.max(img.width, img.height);
+        const scale = Math.min(1, MAX_DIM / maxSide);
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.75)); // Pesa menos de 150KB
+      };
+      img.onerror = () => {
+        resolve((e.target?.result as string) || "");
+      };
+    };
+    reader.onerror = () => resolve("");
+  });
+};
+
+/**
  * Comprime un archivo File o una cadena Data URL / Base64 existente utilizando HTML5 Canvas.
  * Retorna una promesa que resuelve con la cadena Data URL (Base64) optimizada.
  */

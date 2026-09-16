@@ -21,8 +21,19 @@ import { NetworkUsageCard } from "@/components/NetworkUsageCard";
 import { SecretPinModal } from "@/components/SecretPinModal";
 import { AdminControlModal } from "@/components/AdminControlModal";
 import { SpeedTestModal } from "@/components/SpeedTestModal";
-import { Loader2, CheckCircle2 } from "lucide-react";
+import { MultiLineSelectorModal, ServiceOption } from "@/components/MultiLineSelectorModal";
+import { Loader2, CheckCircle2, Radio } from "lucide-react";
 import { useConfig } from "@/context/ConfigContext";
+
+// Función para extraer y capitalizar únicamente el primer nombre
+const obtenerPrimerNombre = (nombreCompleto?: string): string => {
+  if (!nombreCompleto) return "Cliente";
+  const limpio = nombreCompleto.replace(/<[^>]*>?/gm, "").trim();
+  const partes = limpio.split(/\s+/);
+  const primer = partes[0] || "";
+  if (primer.toLowerCase() === "abonado") return "Cliente";
+  return primer.charAt(0).toUpperCase() + primer.slice(1).toLowerCase();
+};
 
 function PortalContent() {
   const searchParams = useSearchParams();
@@ -48,10 +59,16 @@ function PortalContent() {
   }, [refreshConfig]);
 
   const [client, setClient] = useState<ClientProfile | null>(null);
+  const [originalClient, setOriginalClient] = useState<any>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasResetConsultation, setHasResetConsultation] = useState(false);
+
+  // Selector multi-línea para clientes con múltiples contratos en WispHub
+  const [multipleServices, setMultipleServices] = useState<ServiceOption[]>([]);
+  const [isMultiLineModalOpen, setIsMultiLineModalOpen] = useState(false);
+  const [pendingDocument, setPendingDocument] = useState<string>("");
 
   // Modals state
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -74,9 +91,9 @@ function PortalContent() {
 
   const hasAutoLoggedRef = useRef(false);
 
-  // Buscar cliente por documento de identidad
+  // Buscar cliente por documento de identidad y opcionalmente id_servicio
   const handleSearch = useCallback(
-    async (documento: string) => {
+    async (documento: string, selectedServiceId?: string, preservedNombre?: string) => {
       const cleanDoc = documento ? documento.toString().trim() : "";
       if (!cleanDoc) return;
 
@@ -85,33 +102,99 @@ function PortalContent() {
       setHasResetConsultation(false);
 
       try {
+        const payload: { documento: string; id_servicio?: string } = { documento: cleanDoc };
+        if (selectedServiceId) {
+          payload.id_servicio = selectedServiceId;
+        }
+
         const res = await fetch("/api/cliente/consultar", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ documento: cleanDoc }),
+          body: JSON.stringify(payload),
         });
 
         const data = await res.json();
 
         if (!res.ok || !data.success) {
-          throw new Error(data.error || "Abonado no encontrado. Verifica el número de documento.");
+          throw new Error(data.error || "Cliente no encontrado. Verifica el número de documento.");
         }
 
-        // 2. Guardado en consulta exitosa (Manual o Automática)
+        // Caso Multi-línea: Si la API retorna 2 o más servicios/contratos asociados a esa misma cédula
+        // No cargues el primero por defecto. Activa un modal de selección.
+        if (data.multipleServices === true && Array.isArray(data.servicios) && data.servicios.length >= 2) {
+          setMultipleServices(data.servicios);
+          setPendingDocument(cleanDoc);
+          const firstNombre =
+            data.nombre ||
+            data.nombreTitular ||
+            data.nombre_completo ||
+            data.servicios.find((s: any) => s.nombre || s.nombre_completo)?.nombre ||
+            preservedNombre ||
+            "";
+          if (firstNombre) {
+            setOriginalClient((prev: any) => ({
+              ...(prev || {}),
+              nombre: firstNombre,
+              nombre_completo: firstNombre,
+              nombreCompleto: firstNombre,
+              cedula: cleanDoc,
+            }));
+          }
+          setIsMultiLineModalOpen(true);
+          setIsLoading(false);
+          return;
+        }
+
+        // Si la respuesta incluye lista de servicios, mantenerla para permitir cambiar de línea
+        if (Array.isArray(data.servicios) && data.servicios.length > 0) {
+          setMultipleServices(data.servicios);
+        }
+
+        // 2. Guardado en consulta exitosa: guarda en localStorage tanto la cédula como el 'id_servicio' seleccionado
+        const effectiveServiceId = selectedServiceId || data.cliente?.servicio?.idServicio;
         if (typeof window !== "undefined") {
           try {
             localStorage.setItem("cliente_cedula", cleanDoc);
+            if (effectiveServiceId) {
+              localStorage.setItem("cliente_id_servicio", String(effectiveServiceId));
+            }
           } catch (e) {
             console.warn("[localStorage error]:", e);
           }
         }
 
-        setClient(data.cliente);
+        // Obtener el nombre del titular desde la respuesta principal o estado previo
+        const nombreTitular =
+          preservedNombre ||
+          originalClient?.nombre ||
+          originalClient?.nombreCompleto ||
+          originalClient?.nombre_completo ||
+          data.nombre ||
+          data.nombreTitular ||
+          data.cliente?.nombre ||
+          data.cliente?.nombreCompleto ||
+          "";
+
+        const clienteActivo: ClientProfile = {
+          ...data.cliente,
+          nombreCompleto:
+            nombreTitular && (!data.cliente?.nombreCompleto || data.cliente.nombreCompleto.toLowerCase().includes("cédula") || data.cliente.nombreCompleto.toLowerCase().includes("cedula"))
+              ? nombreTitular
+              : data.cliente?.nombreCompleto || nombreTitular || "Cliente Registrado",
+        };
+        (clienteActivo as any).nombre = clienteActivo.nombreCompleto;
+        (clienteActivo as any).id_servicio = effectiveServiceId;
+
+        if (clienteActivo.nombreCompleto && !clienteActivo.nombreCompleto.toLowerCase().includes("cédula")) {
+          setOriginalClient((prev: any) => prev || clienteActivo);
+        }
+
+        setClient(clienteActivo);
         let clientInvoices = data.facturas || [];
 
         // Sincronización proactiva con /api/facturas para garantizar la extracción total de facturas históricas
         try {
-          const serviceId = data.cliente?.servicio?.idServicio || "";
+          const serviceId = effectiveServiceId || data.cliente?.servicio?.idServicio || "";
           const usuario = data.cliente?.usuario || data.usuario || "";
           const fParams = new URLSearchParams();
           if (serviceId) fParams.set("id_servicio", String(serviceId));
@@ -131,41 +214,121 @@ function PortalContent() {
 
         setInvoices(clientInvoices);
 
-        // Actualizar URL con query param para permitir recargar o compartir
+        // Actualizar URL con query params para permitir recargar o compartir
         if (typeof window !== "undefined") {
           const newUrl = new URL(window.location.href);
           newUrl.pathname = "/";
           newUrl.searchParams.set("cedula", cleanDoc);
+          if (effectiveServiceId) {
+            newUrl.searchParams.set("id_servicio", String(effectiveServiceId));
+          }
           window.history.replaceState({}, "", newUrl.toString());
         }
 
-        toast.success(`¡Bienvenid@, ${data.cliente.nombreCompleto.split(" ")[0]}!`, {
+        toast.success(`¡Bienvenid@, ${obtenerPrimerNombre(clienteActivo.nombreCompleto)}!`, {
           description: "Datos de tu servicio y facturación cargados correctamente.",
         });
       } catch (err: any) {
         console.error(err);
         setClient(null);
         setInvoices([]);
-        setError(err.message || "Abonado no encontrado.");
+        setError(err.message || "Cliente no encontrado.");
 
         // Limpiar URL y localStorage si la cédula falló para no quedarse en bucle
         if (typeof window !== "undefined") {
           try {
             localStorage.removeItem("cliente_cedula");
+            localStorage.removeItem("cliente_id_servicio");
           } catch (e) {
             console.warn("[localStorage error]:", e);
           }
           window.history.replaceState({}, "", "/");
         }
 
-        toast.error("Abonado no encontrado", {
-          description: err.message || "El número ingresado no coincide con ningún abonado registrado.",
+        toast.error("Cliente no encontrado", {
+          description: err.message || "El número ingresado no coincide con ningún cliente registrado.",
         });
       } finally {
         setIsLoading(false);
       }
     },
-    []
+    [originalClient]
+  );
+
+  // 2. Solución: Preservar el Nombre del Titular en la Selección Multi-Línea
+  const handleSelectService = useCallback(
+    (servicioSeleccionado: ServiceOption) => {
+      setIsMultiLineModalOpen(false);
+      const targetDoc =
+        pendingDocument ||
+        client?.cedula ||
+        (typeof window !== "undefined" ? localStorage.getItem("cliente_cedula") || "" : "");
+      const selectedServiceId = String(
+        servicioSeleccionado.id_servicio || servicioSeleccionado.idServicio || servicioSeleccionado.id || ""
+      );
+
+      // 1. Obtener el nombre del titular desde la respuesta principal de la consulta
+      const nombreTitular =
+        originalClient?.nombre ||
+        originalClient?.nombreCompleto ||
+        originalClient?.nombre_completo ||
+        client?.nombreCompleto ||
+        (client as any)?.nombre ||
+        servicioSeleccionado.nombre ||
+        servicioSeleccionado.nombre_completo ||
+        "";
+
+      // 2. Fusionar los datos de la línea sin perder el nombre del cliente
+      if (client || originalClient) {
+        const baseClient = originalClient || client;
+        const updatedClient: ClientProfile = {
+          ...baseClient,
+          ...servicioSeleccionado,
+          nombreCompleto: nombreTitular || baseClient.nombreCompleto,
+          direccion: servicioSeleccionado.direccion || baseClient.direccion,
+          plan: {
+            ...(baseClient.plan || {}),
+            nombre:
+              servicioSeleccionado.planNombre ||
+              servicioSeleccionado.plan ||
+              servicioSeleccionado.plan_internet ||
+              baseClient.plan?.nombre ||
+              "Fibra Óptica",
+            velocidadBajada: baseClient.plan?.velocidadBajada || "50 Mbps",
+            velocidadSubida: baseClient.plan?.velocidadSubida || "50 Mbps",
+            precioMensual: baseClient.plan?.precioMensual || 0,
+            tecnologia: baseClient.plan?.tecnologia || "Fibra Óptica FTTH",
+          },
+          servicio: {
+            ...(baseClient.servicio || {}),
+            idServicio: selectedServiceId || baseClient.servicio?.idServicio,
+            ip: servicioSeleccionado.ip || baseClient.servicio?.ip || "",
+            nodo: servicioSeleccionado.nodo || baseClient.servicio?.nodo || "",
+            routerOnt: baseClient.servicio?.routerOnt || "Router ONT Dual Band 5G",
+            fechaCorte: baseClient.servicio?.fechaCorte || "",
+            fechaLimitePago: baseClient.servicio?.fechaLimitePago || "",
+            diaPago: baseClient.servicio?.diaPago || 1,
+          },
+        };
+        (updatedClient as any).nombre = nombreTitular;
+        (updatedClient as any).id_servicio = selectedServiceId;
+        (updatedClient as any).direccion = servicioSeleccionado.direccion;
+        (updatedClient as any).alias = servicioSeleccionado.alias;
+        setClient(updatedClient);
+      }
+
+      if (typeof window !== "undefined") {
+        try {
+          if (targetDoc) localStorage.setItem("cliente_cedula", targetDoc);
+          if (selectedServiceId) localStorage.setItem("cliente_id_servicio", selectedServiceId);
+        } catch (e) {
+          console.warn("[localStorage error]:", e);
+        }
+      }
+
+      handleSearch(targetDoc, selectedServiceId, nombreTitular);
+    },
+    [pendingDocument, client, originalClient, handleSearch]
   );
 
   // 1. Carga automática al abrir el portal (Auto-Login por URL ?cedula= o por localStorage)
@@ -174,26 +337,29 @@ function PortalContent() {
 
     // Primero, revisar si viene el parámetro 'cedula' o 'doc' en la URL
     const urlCedula = (searchParams.get("cedula") || searchParams.get("doc") || "").trim();
+    const urlServiceId = (searchParams.get("id_servicio") || searchParams.get("servicio") || "").trim();
     if (urlCedula) {
       hasAutoLoggedRef.current = true;
       if (typeof window !== "undefined") {
         try {
           localStorage.setItem("cliente_cedula", urlCedula);
+          if (urlServiceId) localStorage.setItem("cliente_id_servicio", urlServiceId);
         } catch (e) {
           console.warn("[localStorage error]:", e);
         }
       }
-      handleSearch(urlCedula);
+      handleSearch(urlCedula, urlServiceId || undefined);
       return;
     }
 
-    // Si no viene en la URL, buscar si existe 'cliente_cedula' en localStorage
+    // Si no viene en la URL, buscar si existe 'cliente_cedula' y 'cliente_id_servicio' en localStorage
     if (typeof window !== "undefined") {
       try {
         const savedCedula = (localStorage.getItem("cliente_cedula") || "").trim();
+        const savedServiceId = (localStorage.getItem("cliente_id_servicio") || "").trim();
         if (savedCedula && !client && !isLoading) {
           hasAutoLoggedRef.current = true;
-          handleSearch(savedCedula);
+          handleSearch(savedCedula, savedServiceId || undefined);
         }
       } catch (e) {
         console.warn("[localStorage error]:", e);
@@ -204,8 +370,11 @@ function PortalContent() {
   // 3. Botón "Nueva Consulta" (Cerrar sesión / Limpiar estado)
   const handleResetConsultation = useCallback(() => {
     setClient(null);
+    setOriginalClient(null);
     setInvoices([]);
     setError(null);
+    setMultipleServices([]);
+    setPendingDocument("");
     setPaymentReportSuccessData(null);
     setHasResetConsultation(true);
     hasAutoLoggedRef.current = true;
@@ -213,6 +382,7 @@ function PortalContent() {
     if (typeof window !== "undefined") {
       try {
         localStorage.removeItem("cliente_cedula");
+        localStorage.removeItem("cliente_id_servicio");
       } catch (e) {
         console.warn("[localStorage error]:", e);
       }
@@ -335,7 +505,37 @@ function PortalContent() {
             {/* 1. Carrusel de Publicidad y Promociones */}
             <PromoCarousel />
 
-            {/* 2. Saludo y Tarjeta Principal de Saldo con botón Cambiar */}
+            {/* Barra Informativa de Servicios Múltiples Asociados */}
+            {multipleServices.length > 1 && (
+              <div className="rounded-2xl p-3 sm:p-4 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800/60 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 backdrop-blur-md transition-colors">
+                <div className="flex items-center gap-2.5 text-xs sm:text-sm text-slate-700 dark:text-sky-200">
+                  <span className="relative flex h-2.5 w-2.5 shrink-0">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-sky-600 dark:bg-sky-400" />
+                  </span>
+                  <span className="leading-snug font-medium">
+                    Tienes{" "}
+                    <strong className="font-bold text-sky-950 dark:text-white tabular-nums">
+                      {multipleServices.length} servicios
+                    </strong>{" "}
+                    registrados con tu documento.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPendingDocument(client.cedula);
+                    setIsMultiLineModalOpen(true);
+                  }}
+                  className="self-end sm:self-auto px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 active:scale-95 text-white dark:bg-sky-400 dark:hover:bg-sky-300 dark:text-slate-950 text-xs font-bold transition-all cursor-pointer shadow-sm shrink-0 flex items-center gap-1.5"
+                >
+                  <Radio className="w-3.5 h-3.5" />
+                  <span>Cambiar servicio</span>
+                </button>
+              </div>
+            )}
+
+            {/* Tarjeta Principal de Saldo con botón Cambiar */}
             <StatusCard
               client={client}
               onOpenPayment={() => handleOpenPayment()}
@@ -367,7 +567,7 @@ function PortalContent() {
           </p>
           <p className="flex items-center gap-1.5">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-            <span>Plataforma integrada con WispHub API</span>
+            <span>Plataforma oficial • Internet Aponte Plus</span>
             <span>•</span>
             <button
               onClick={() => setIsFaqOpen(true)}
@@ -436,6 +636,16 @@ function PortalContent() {
       <SpeedTestModal
         isOpen={isSpeedTestOpen}
         onClose={() => setIsSpeedTestOpen(false)}
+      />
+
+      {/* Modal Selector para clientes con múltiples líneas */}
+      <MultiLineSelectorModal
+        isOpen={isMultiLineModalOpen}
+        onClose={() => setIsMultiLineModalOpen(false)}
+        documento={pendingDocument}
+        servicios={multipleServices}
+        onSelectService={handleSelectService}
+        isLoading={isLoading}
       />
 
       {/* Botón Flotante Persistente de WhatsApp */}

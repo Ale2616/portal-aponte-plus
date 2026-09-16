@@ -69,10 +69,8 @@ export function SearchScreen({
       ? banner.whatsappMensaje
       : defaultPromoMsg;
   const promoButtonText = banner?.botonTexto
-    ? banner.botonTexto.includes("📲")
-      ? banner.botonTexto
-      : `📲 ${banner.botonTexto}`
-    : "📲 Preguntar por WhatsApp";
+    ? banner.botonTexto.replace(/📲/g, "").replace(/💬/g, "").trim() || "Preguntar por WhatsApp"
+    : "Preguntar por WhatsApp";
 
   const targetWhatsappUrl = banner?.linkWhatsapp && banner.linkWhatsapp.startsWith("http")
     ? banner.linkWhatsapp
@@ -80,7 +78,7 @@ export function SearchScreen({
 
   const activeBannersFromGlobal = Array.isArray(globalSettings?.banners)
     ? globalSettings.banners
-        .filter((b) => b.active === true && b.url && b.url.trim() !== "")
+        .filter((b: any) => (b.activo !== undefined ? b.activo === true : b.active === true) && b.url && b.url.trim() !== "")
         .map((b) => b.url)
     : [];
 
@@ -174,7 +172,7 @@ export function SearchScreen({
               </div>
             </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 px-1">
-              Sin puntos, espacios ni guiones. Registrado en tu contrato de internet.
+              Sin puntos, espacios ni guiones. Registrado en tu servicio de internet.
             </p>
           </div>
 
@@ -187,7 +185,7 @@ export function SearchScreen({
             {isLoading ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" strokeWidth={2.2} />
-                <span>Consultando WispHub...</span>
+                <span>Consultando información...</span>
               </>
             ) : (
               <>
@@ -198,34 +196,106 @@ export function SearchScreen({
           </button>
         </form>
 
-        {/* ─── BOTÓN PÍLDORA INTERACTIVO TEST DE VELOCIDAD ───────────────── */}
-        {onOpenSpeedTest && (
-          <div className="pt-1">
+        {/* ─── ACCESOS RÁPIDOS MÓVIL (GRID 2x2 EQUILIBRADO PARA < 640px) ───── */}
+        <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-200/60 dark:border-slate-800/70 sm:hidden">
+          {/* 1. Test de Velocidad • Medir Conexión */}
+          {onOpenSpeedTest ? (
             <button
               type="button"
               onClick={onOpenSpeedTest}
-              className="w-full min-h-[48px] py-2.5 px-4 rounded-2xl text-xs sm:text-sm font-semibold border border-cyan-500/30 hover:border-cyan-400 bg-slate-900/60 hover:bg-slate-900 text-slate-200 hover:text-white flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer shadow-sm shadow-cyan-950/20"
+              className="min-h-[44px] p-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-900/60 hover:bg-slate-100 dark:hover:bg-slate-800/80 text-[11px] font-semibold text-slate-700 dark:text-slate-200 border border-slate-200/60 dark:border-slate-800 transition-all flex items-center gap-2 text-left cursor-pointer active:scale-[0.98]"
               title="Medir velocidad de conexión de tu fibra óptica"
             >
-              <Gauge className="w-4 h-4 text-cyan-400 animate-pulse" strokeWidth={2} />
-              <span>Test de Velocidad • Medir Conexión</span>
+              <Gauge className="w-4 h-4 text-cyan-500 shrink-0 animate-pulse" strokeWidth={2} />
+              <span className="leading-tight">Test Velocidad</span>
             </button>
-          </div>
-        )}
+          ) : (
+            <div className="min-h-[44px] p-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-900/60 text-[11px] font-semibold text-slate-700 dark:text-slate-200 border border-slate-200/60 dark:border-slate-800 flex items-center gap-2">
+              <Gauge className="w-4 h-4 text-cyan-500 shrink-0" strokeWidth={2} />
+              <span className="leading-tight">Fibra Óptica</span>
+            </div>
+          )}
 
-        {/* ─── MICRO-DETALLES DE CONFIANZA (FLEX WRAP RESPONSIVO) ─────────── */}
-        <div className="flex flex-wrap items-center justify-center gap-2 pt-4 border-t border-slate-200/60 dark:border-slate-800/70 text-xs text-slate-400">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 text-[11px] font-semibold text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-800">
-            <Lock className="w-3.5 h-3.5 text-cyan-500 flex-shrink-0" strokeWidth={2} />
+          {/* 2. Conexión Cifrada */}
+          <div className="min-h-[44px] p-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-900/60 text-[11px] font-semibold text-slate-700 dark:text-slate-200 border border-slate-200/60 dark:border-slate-800 flex items-center gap-2 text-left">
+            <Lock className="w-4 h-4 text-cyan-500 shrink-0" strokeWidth={2} />
             <span className="leading-tight">Conexión Cifrada</span>
           </div>
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 text-[11px] font-semibold text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-800">
-            <Headphones className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" strokeWidth={2} />
+
+          {/* 3. Soporte Rápido (Enlace directo a WhatsApp de atención) */}
+          <a
+            href={`https://wa.me/${phoneWithCountry || "573185577157"}?text=${encodeURIComponent("Hola Internet Aponte Plus, deseo atención y soporte técnico.")}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="min-h-[44px] p-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-900/60 hover:bg-slate-100 dark:hover:bg-slate-800/80 text-[11px] font-semibold text-slate-700 dark:text-slate-200 border border-slate-200/60 dark:border-slate-800 transition-all flex items-center gap-2 text-left cursor-pointer active:scale-[0.98]"
+            title="Contactar soporte por WhatsApp"
+          >
+            <Headphones className="w-4 h-4 text-amber-500 shrink-0" strokeWidth={2} />
             <span className="leading-tight">Soporte Rápido</span>
-          </div>
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 text-[11px] font-semibold text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-800">
-            <Receipt className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" strokeWidth={2} />
-            <span className="leading-tight">Facturación en Línea</span>
+          </a>
+
+          {/* 4. Facturación en Línea (Acceso directo a comprobantes/pagos) */}
+          <button
+            type="button"
+            onClick={() => {
+              const input = document.getElementById("cedula-input");
+              if (input) {
+                input.focus();
+                input.scrollIntoView({ behavior: "smooth", block: "center" });
+              }
+            }}
+            className="min-h-[44px] p-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-900/60 hover:bg-slate-100 dark:hover:bg-slate-800/80 text-[11px] font-semibold text-slate-700 dark:text-slate-200 border border-slate-200/60 dark:border-slate-800 transition-all flex items-center gap-2 text-left cursor-pointer active:scale-[0.98]"
+            title="Consultar factura con cédula"
+          >
+            <Receipt className="w-4 h-4 text-emerald-500 shrink-0" strokeWidth={2} />
+            <span className="leading-tight">Facturación Línea</span>
+          </button>
+        </div>
+
+        {/* ─── VISTA ESCRITORIO (PC >= 640px) CONSERVA ESTRUCTURA EXACTA ─── */}
+        <div className="hidden sm:block space-y-4">
+          {onOpenSpeedTest && (
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={onOpenSpeedTest}
+                className="w-full min-h-[48px] py-2.5 px-4 rounded-2xl text-xs sm:text-sm font-semibold border border-cyan-500/30 hover:border-cyan-400 bg-slate-900/60 hover:bg-slate-900 text-slate-200 hover:text-white flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer shadow-sm shadow-cyan-950/20"
+                title="Medir velocidad de conexión de tu fibra óptica"
+              >
+                <Gauge className="w-4 h-4 text-cyan-400 animate-pulse" strokeWidth={2} />
+                <span>Test de Velocidad • Medir Conexión</span>
+              </button>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-4 border-t border-slate-200/60 dark:border-slate-800/70 text-xs text-slate-400">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 text-[11px] font-semibold text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-800">
+              <Lock className="w-3.5 h-3.5 text-cyan-500 flex-shrink-0" strokeWidth={2} />
+              <span className="leading-tight">Conexión Cifrada</span>
+            </div>
+            <a
+              href={`https://wa.me/${phoneWithCountry || "573185577157"}?text=${encodeURIComponent("Hola Internet Aponte Plus, deseo atención y soporte técnico.")}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-semibold text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-800 transition-colors cursor-pointer"
+            >
+              <Headphones className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" strokeWidth={2} />
+              <span className="leading-tight">Soporte Rápido</span>
+            </a>
+            <button
+              type="button"
+              onClick={() => {
+                const input = document.getElementById("cedula-input");
+                if (input) {
+                  input.focus();
+                  input.scrollIntoView({ behavior: "smooth", block: "center" });
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-semibold text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-800 transition-colors cursor-pointer"
+            >
+              <Receipt className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" strokeWidth={2} />
+              <span className="leading-tight">Facturación en Línea</span>
+            </button>
           </div>
         </div>
 
@@ -247,14 +317,14 @@ export function SearchScreen({
       {/* Botón Instalación PWA */}
       <InstallPWAButton variant="banner" />
 
-      {/* Acceso Directo por Cédula y Redirección MikroTik */}
+      {/* Acceso Directo por Cédula */}
       <div className="rounded-2xl p-4 bg-white/70 dark:bg-slate-900/60 backdrop-blur-md border border-slate-200/60 dark:border-slate-800/80 text-xs text-slate-500 dark:text-slate-400 space-y-1">
         <p className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
           <Radio className="w-3.5 h-3.5 text-cyan-500" strokeWidth={2} />
           Acceso Directo por Cédula (Sin Contraseñas ni Registros)
         </p>
         <p className="leading-relaxed">
-          Consulta instantánea conectada a WispHub y MikroTik. Si accedes desde el portal cautivo o un enlace con tu documento (<code className="font-sans font-bold tracking-tight tabular-nums text-slate-700 dark:text-slate-300">?cedula=1020304050</code>), se cargará tu estado automáticamente.
+          Consulta instantánea conectada a la red de fibra óptica. Si accedes desde el portal cautivo o un enlace con tu documento (<code className="font-sans font-bold tracking-tight tabular-nums text-slate-700 dark:text-slate-300">?cedula=1020304050</code>), se cargará tu estado automáticamente.
         </p>
       </div>
     </div>

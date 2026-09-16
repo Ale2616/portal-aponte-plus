@@ -123,7 +123,7 @@ export function Header({
               <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl border bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-800">
                 <span className={`w-2 h-2 rounded-full ${statusInfo.dotColor}`} />
                 <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
-                  {client.nombreCompleto.split(" ")[0]} ({statusInfo.shortLabel})
+                  {(client.nombreCompleto || "Cliente").replace(/^Abonado\b/i, "Cliente").split(" ")[0]} ({statusInfo.shortLabel})
                 </span>
               </div>
             )}

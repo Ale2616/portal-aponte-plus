@@ -8,6 +8,7 @@ const ConsultarSchema = z.object({
     .string()
     .min(1, "Debes ingresar un número de documento")
     .max(30, "El documento es demasiado largo"),
+  id_servicio: z.union([z.string(), z.number()]).optional().nullable(),
 });
 
 export async function POST(req: NextRequest) {
@@ -22,6 +23,7 @@ export async function POST(req: NextRequest) {
 
     const rawInput = parseResult.data.documento.toString().trim();
     const cleanDocument = sanitizeDocument(rawInput);
+    const targetServiceId = parseResult.data.id_servicio ? String(parseResult.data.id_servicio).trim() : null;
 
     if (!cleanDocument) {
       return NextResponse.json(
@@ -36,21 +38,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "Error de sincronización con WispHub: Credenciales (WISPHUB_API_KEY) no configuradas en el servidor.",
+          error: "Error de sincronización con el servidor: Credenciales no configuradas en el servidor.",
         },
         { status: 500 }
       );
     }
 
-    // 2. Consulta real a la API de WispHub
-    const result = await getClientByDocument(cleanDocument);
+    // 2. Consulta real a la API de WispHub (pasa targetServiceId si fue seleccionado)
+    const result = await getClientByDocument(cleanDocument, targetServiceId);
+
+    // Si detecta 2 o más servicios y no se especificó id_servicio, activa el selector multi-línea
+    if (result.multipleServices && Array.isArray(result.servicios) && result.servicios.length >= 2) {
+      const firstNombre = result.nombre || result.servicios.find((s: any) => s.nombre || s.nombre_completo)?.nombre || "";
+      return NextResponse.json({
+        success: true,
+        multipleServices: true,
+        servicios: result.servicios,
+        documento: cleanDocument,
+        cedula: cleanDocument,
+        nombre: firstNombre,
+        nombre_completo: firstNombre,
+        nombreTitular: firstNombre,
+      });
+    }
 
     if (!result.success || !result.cliente) {
       const status = result.statusCode || (result.error?.includes("no encontrado") ? 404 : 502);
       return NextResponse.json(
         {
           success: false,
-          error: result.error || "Error de sincronización con WispHub.",
+          error: result.error || "Error de sincronización con el sistema.",
         },
         { status }
       );
@@ -75,6 +92,7 @@ export async function POST(req: NextRequest) {
       pendientes,
       historial,
       totalPendiente,
+      servicios: result.servicios,
       nombre: cliente.nombreCompleto,
       cedula: cliente.cedula,
       usuario: cliente.usuario,
@@ -90,7 +108,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: "Error de sincronización con WispHub: Fallo inesperado al procesar la solicitud.",
+        error: "Error de sincronización con el sistema: Fallo inesperado al procesar la solicitud.",
       },
       { status: 500 }
     );

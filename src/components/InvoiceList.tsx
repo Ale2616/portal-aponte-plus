@@ -319,7 +319,7 @@ export function InvoiceList({ invoices, onViewPdf, onPayInvoice }: InvoiceListPr
                 No se registran facturas anteriores para este servicio.
               </h4>
               <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto font-sans">
-                Este servicio es nuevo o no registra pagos completados previamente. Tus comprobantes oficiales de WispHub aparecerán aquí automáticamente tras confirmarse cada pago.
+                Este servicio es nuevo o no registra pagos completados previamente. Tus comprobantes oficiales aparecerán aquí automáticamente tras confirmarse cada pago.
               </p>
             </div>
           ) : (
@@ -351,7 +351,7 @@ export function InvoiceList({ invoices, onViewPdf, onPayInvoice }: InvoiceListPr
                         </div>
 
                         <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1 text-xs text-slate-500 dark:text-slate-400 font-sans">
-                          <span>Factura WispHub: <strong className="text-slate-700 dark:text-slate-300 font-sans font-semibold tracking-tight tabular-nums">{inv.folio}</strong></span>
+                          <span>Factura Oficial: <strong className="text-slate-700 dark:text-slate-300 font-sans font-semibold tracking-tight tabular-nums">{inv.folio}</strong></span>
                           <span>•</span>
                           <span>Emisión: <span className="font-sans font-semibold tracking-tight tabular-nums">{formatDate(inv.fechaEmision)}</span></span>
                           {inv.fechaPago && (

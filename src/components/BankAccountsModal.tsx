@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { branding, PaymentMethod } from "@/config/branding";
 import { useConfig } from "@/context/ConfigContext";
+import { toast } from "sonner";
 import {
   X,
   Copy,
@@ -14,7 +15,6 @@ import {
   ShieldCheck,
   MessageSquare,
 } from "lucide-react";
-import { toast } from "sonner";
 
 interface BankAccountsModalProps {
   isOpen: boolean;
@@ -24,6 +24,20 @@ interface BankAccountsModalProps {
 export function BankAccountsModal({ isOpen, onClose }: BankAccountsModalProps) {
   const { config, globalSettings } = useConfig();
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Bloqueo estricto del scroll del fondo (body scroll-lock)
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
+
+      return () => {
+        document.body.style.overflow = originalOverflow || "unset";
+        document.documentElement.style.overflow = "";
+      };
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -60,9 +74,9 @@ export function BankAccountsModal({ isOpen, onClose }: BankAccountsModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/70 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
       <div
-        className="relative w-full max-w-xl max-h-[92vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-5 sm:p-7 space-y-6"
+        className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto overscroll-contain rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-5 sm:p-7 space-y-6"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
