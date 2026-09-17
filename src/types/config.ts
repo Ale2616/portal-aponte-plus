@@ -65,11 +65,7 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
     bancolombia: "84758122483",
     breB: "311 276 0959",
   },
-  banners: [
-    { id: "banner-1", url: "/banner1.webp", active: true },
-    { id: "banner-2", url: "/banner2.webp", active: true },
-    { id: "banner-3", url: "/banner3.webp", active: true },
-  ],
+  banners: [],
   avisoGlobal: {
     activo: false,
     texto: "Aviso de mantenimiento programado.",

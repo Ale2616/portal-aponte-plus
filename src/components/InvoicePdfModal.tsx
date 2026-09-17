@@ -86,16 +86,21 @@ export function InvoicePdfModal({
 }: InvoicePdfModalProps) {
   const { config, globalSettings } = useConfig();
 
+  // Bloqueo estricto del scroll del fondo (body scroll-lock) — REGLA DE HOOKS:
+  // Este useEffect se declara SIEMPRE, la condición va DENTRO del efecto.
   useEffect(() => {
-    // Bloquear scroll de la página de fondo
-    document.body.style.overflow = 'hidden';
-    
-    // Restaurar scroll al cerrar el modal o desmontar el componente
+    if (!isOpen) return;
+    const prevBody = document.body.style.overflow;
+    const prevHtml = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = prevBody || "unset";
+      document.documentElement.style.overflow = prevHtml || "";
     };
-  }, []);
+  }, [isOpen]);
 
+  // Retorno condicional DESPUÉS de todos los hooks
   if (!isOpen || !invoice) return null;
 
   const rawFp =
@@ -163,20 +168,6 @@ export function InvoicePdfModal({
     globalSettings?.canalesPago?.bancolombia || "84758122483";
   const brebNumber =
     globalSettings?.canalesPago?.breB || "311 276 0959";
-
-  // Bloqueo estricto del scroll del fondo (body scroll-lock)
-  useEffect(() => {
-    if (isOpen) {
-      const originalOverflow = document.body.style.overflow;
-      document.body.style.overflow = "hidden";
-      document.documentElement.style.overflow = "hidden";
-
-      return () => {
-        document.body.style.overflow = originalOverflow || "unset";
-        document.documentElement.style.overflow = "";
-      };
-    }
-  }, [isOpen]);
 
   const handlePrint = () => {
     window.print();

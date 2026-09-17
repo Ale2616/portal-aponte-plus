@@ -99,13 +99,43 @@ async function handleFacturasQuery(req: NextRequest) {
       targetUsuario = targetClientId;
     }
 
+    // PRIORIDAD 1: Resolver el usuario EXACTO por id_servicio cuando está disponible.
+    // Esto evita el problema de cédulas con múltiples servicios donde cada uno tiene
+    // un usuario diferente (ej. nury-garavito-avendano@aponteplus vs nury-garavito-negocio-ropa@aponteplus).
+    if (targetServiceId && !targetUsuario) {
+      try {
+        const clientRes = await fetch(`${baseUrl}/api/clientes/${encodeURIComponent(targetServiceId)}/`, { headers, cache: "no-store" });
+        if (clientRes.ok) {
+          const clientData = await clientRes.json();
+          if (clientData?.usuario) targetUsuario = String(clientData.usuario).trim();
+          if (clientData?.cedula && !targetCedula) targetCedula = String(clientData.cedula).trim();
+          if (clientData?.id && !targetClientId) targetClientId = String(clientData.id).trim();
+        }
+      } catch (cErr) {
+        console.warn("[WISPHUB API] No fue posible obtener detalle de cliente por id_servicio:", cErr);
+      }
+    }
+
+    // PRIORIDAD 2: Si solo hay cédula, buscar clientes por cédula y seleccionar el correcto
     if (targetCedula && (!targetUsuario || !targetServiceId)) {
       try {
-        const searchRes = await fetch(`${baseUrl}/api/clientes/?cedula=${encodeURIComponent(targetCedula)}`, { headers, cache: "no-store" });
+        const searchRes = await fetch(`${baseUrl}/api/clientes/?cedula=${encodeURIComponent(targetCedula)}&page_size=50`, { headers, cache: "no-store" });
         if (searchRes.ok) {
           const sData = await searchRes.json();
           const items = Array.isArray(sData?.results) ? sData.results : Array.isArray(sData) ? sData : [];
-          const match = items.find((c: any) => String(c.cedula || "").trim() === targetCedula) || items[0];
+
+          // Si tenemos un id_servicio, buscar el cliente que coincida exactamente
+          let match: any = null;
+          if (targetServiceId) {
+            match = items.find((c: any) =>
+              String(c.id_servicio || c.id || "").trim() === targetServiceId
+            );
+          }
+          // Fallback: buscar por cédula exacta o tomar el primero
+          if (!match) {
+            match = items.find((c: any) => String(c.cedula || "").trim() === targetCedula) || items[0];
+          }
+
           if (match) {
             if (match.usuario && !targetUsuario) targetUsuario = String(match.usuario).trim();
             if (match.id_servicio && !targetServiceId) targetServiceId = String(match.id_servicio || match.id || "").trim();
@@ -117,27 +147,14 @@ async function handleFacturasQuery(req: NextRequest) {
       }
     }
 
-    if (targetServiceId && (!targetUsuario || !targetCedula)) {
-      try {
-        const clientRes = await fetch(`${baseUrl}/api/clientes/${encodeURIComponent(targetServiceId)}/`, { headers, cache: "no-store" });
-        if (clientRes.ok) {
-          const clientData = await clientRes.json();
-          if (clientData?.usuario && !targetUsuario) targetUsuario = String(clientData.usuario).trim();
-          if (clientData?.cedula && !targetCedula) targetCedula = String(clientData.cedula).trim();
-          if (clientData?.id && !targetClientId) targetClientId = String(clientData.id).trim();
-        }
-      } catch (cErr) {
-        console.warn("[WISPHUB API] No fue posible obtener detalle de cliente por id_servicio:", cErr);
-      }
-    }
-
     // 2. Consulta paginada a WispHub recorriendo todas las páginas (data.next) con rango histórico
     const rangeParam = "fecha_vencimiento__range_0=2020-01-01&fecha_vencimiento__range_1=2030-12-31";
+    const pageSizeParam = "page_size=200";
     let currentUrl: string | null = targetUsuario
-      ? `${baseUrl}/api/facturas/?cliente=${encodeURIComponent(targetUsuario)}&${rangeParam}`
+      ? `${baseUrl}/api/facturas/?cliente=${encodeURIComponent(targetUsuario)}&${rangeParam}&${pageSizeParam}`
       : targetServiceId
-      ? `${baseUrl}/api/facturas/?id_servicio=${encodeURIComponent(targetServiceId)}&${rangeParam}`
-      : `${baseUrl}/api/facturas/`;
+      ? `${baseUrl}/api/facturas/?id_servicio=${encodeURIComponent(targetServiceId)}&${rangeParam}&${pageSizeParam}`
+      : `${baseUrl}/api/facturas/?${pageSizeParam}`;
 
     const allRawInvoices: WisphubRawInvoice[] = [];
     let pageCount = 0;
@@ -177,9 +194,10 @@ async function handleFacturasQuery(req: NextRequest) {
     }
 
     console.log(
-      `[WISPHUB API] Facturas encontradas para servicio ${targetServiceId || targetCedula}:`,
+      `[WISPHUB API] Facturas totales para servicio ${targetServiceId || targetCedula}:`,
       allRawInvoices.length
     );
+
 
     // 3. Filtrado en memoria: extraer todas las facturas correspondientes a este servicio/abonado
     let matchedInvoices = allRawInvoices.filter((raw: any) => {
@@ -219,25 +237,45 @@ async function handleFacturasQuery(req: NextRequest) {
         (typeof raw.cliente === "object" ? raw.cliente?.usuario : "") || ""
       ).trim();
 
+      // Match directo por id_servicio (en factura o artículos)
       const matchService = Boolean(targetServiceId && serviceIds.includes(targetServiceId));
+      const matchCrossService = Boolean(targetServiceId && invClientId && invClientId === targetServiceId);
+
+      // Match por cliente / cédula / usuario
       const matchClient = Boolean(targetClientId && invClientId && invClientId === targetClientId);
       const matchCedula = Boolean(targetCedula && invCedula && invCedula === targetCedula);
-      const matchCrossService = Boolean(targetServiceId && invClientId && invClientId === targetServiceId);
       const matchCrossClient = Boolean(targetClientId && serviceIds.includes(targetClientId));
       const matchUsuario = Boolean(targetUsuario && invUsuario && invUsuario.toLowerCase() === targetUsuario.toLowerCase());
+
+      // CORREGIDO: WispHub puede usar IDs de servicio internos diferentes en artículos vs clientes.
+      // Ejemplo: el cliente tiene id_servicio=1182 pero las facturas referencian id_servicio=1323 en artículos.
+      // Si la consulta se hizo por usuario (ya filtrada por persona en WispHub), aceptar por cédula/usuario.
+      if (targetServiceId && serviceIds.length > 0) {
+        // Match directo por servicio: ideal
+        if (matchService || matchCrossService) return true;
+        // Fallback: la consulta fue por usuario y la cédula/usuario coincide → misma persona, aceptar
+        if (targetUsuario && (matchUsuario || matchCedula)) return true;
+        if (targetCedula && matchCedula) return true;
+        return false;
+      }
 
       return matchService || matchClient || matchCedula || matchCrossService || matchCrossClient || matchUsuario;
     });
 
-    // FALLBACK POR CÉDULA: Si la búsqueda inicial devolvió 0 y tenemos cédula, realizar filtrado alternativo por cédula
-    if (matchedInvoices.length === 0 && targetCedula) {
+    // FALLBACK: Si el filtrado no encontró nada, relajar usando cédula o usuario
+    if (matchedInvoices.length === 0 && (targetCedula || targetUsuario)) {
       matchedInvoices = allRawInvoices.filter((raw: any) => {
         const invCed = String(
           raw.cedula ||
           (typeof raw.cliente === "object" ? raw.cliente?.cedula : "") ||
           ""
         ).trim();
-        return invCed === targetCedula;
+        const invUsr = String(
+          (typeof raw.cliente === "object" ? raw.cliente?.usuario : "") || ""
+        ).trim();
+        const matchCed = Boolean(targetCedula && invCed && invCed === targetCedula);
+        const matchUsr = Boolean(targetUsuario && invUsr && invUsr.toLowerCase() === targetUsuario.toLowerCase());
+        return matchCed || matchUsr;
       });
     }
 

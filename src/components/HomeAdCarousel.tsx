@@ -34,22 +34,41 @@ export function HomeAdCarousel({
     .replace(/📲/g, "")
     .replace(/💬/g, "")
     .trim() || "Preguntar por WhatsApp";
-  // Aplica el filtro: muestra solo promociones con activo === true (o si se envían strings de imágenes)
+
+  // Función estricta para validar que una imagen sea válida y NO apunte a banners 404
+  const isSafeImage = (src: any): boolean => {
+    if (!src || typeof src !== "string") return false;
+    const trimmed = src.trim();
+    if (!trimmed) return false;
+    if (
+      trimmed.includes("banner1.webp") ||
+      trimmed.includes("banner2.webp") ||
+      trimmed.includes("banner3.webp")
+    ) {
+      return false;
+    }
+    return (
+      trimmed.startsWith("data:image/") ||
+      trimmed.startsWith("http://") ||
+      trimmed.startsWith("https://") ||
+      trimmed.startsWith("/")
+    );
+  };
+
+  // Aplica el filtro: muestra solo promociones con activo === true y URLs válidas
   let validImages: string[] = [];
   if (Array.isArray(banners) && banners.length > 0) {
     validImages = banners
       .filter((b) => (b.activo !== undefined ? b.activo === true : b.active === true))
       .map((b) => b.url)
-      .filter(Boolean);
+      .filter(isSafeImage);
   } else if (Array.isArray(images)) {
-    validImages = images.filter(Boolean);
+    validImages = images.filter(isSafeImage);
   }
 
-  if (validImages.length === 0) {
-    return null;
-  }
-  const totalSlides = validImages.length;
+  const totalSlides = Math.max(1, validImages.length);
 
+  // REGLA DE ORO DE HOOKS: Todos los hooks se declaran incondicionalmente en la parte superior
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [isZoomOpen, setIsZoomOpen] = useState(false);
@@ -76,14 +95,14 @@ export function HomeAdCarousel({
 
   // AutoPlay continuo cada 4.5 segundos (se pausa si se abre el zoom o se pasa el mouse)
   useEffect(() => {
-    if (totalSlides <= 1 || isPaused || isZoomOpen) return;
+    if (validImages.length <= 1 || isPaused || isZoomOpen) return;
 
     const timer = setInterval(() => {
       nextSlide();
     }, autoPlayInterval);
 
     return () => clearInterval(timer);
-  }, [nextSlide, totalSlides, isPaused, isZoomOpen, autoPlayInterval]);
+  }, [nextSlide, validImages.length, isPaused, isZoomOpen, autoPlayInterval]);
 
   // Soporte Táctil (Swipe) para dispositivos móviles
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -137,6 +156,76 @@ export function HomeAdCarousel({
       document.documentElement.style.overflow = "";
     };
   }, [isZoomOpen, prevSlide, nextSlide]);
+
+  // FALLBACK LIMPIO EN GRADIENTE INSTITUCIONAL SI NO HAY IMÁGENES O ESTÁN VACÍAS
+  if (validImages.length === 0) {
+    return (
+      <div className="w-full max-w-md sm:max-w-lg md:max-w-xl mx-auto overflow-hidden rounded-3xl border border-blue-700/40 bg-gradient-to-r from-blue-900 via-indigo-950 to-blue-950 text-white shadow-2xl shadow-blue-950/40 p-6 sm:p-7 relative select-none">
+        {/* Glows ambientales sutiles */}
+        <div className="absolute -right-12 -top-12 w-48 h-48 rounded-full bg-cyan-500/15 blur-3xl pointer-events-none" />
+        <div className="absolute -left-12 -bottom-12 w-48 h-48 rounded-full bg-blue-500/15 blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col items-center text-center space-y-4">
+          {/* Logo y Badge de Empresa */}
+          <div className="flex items-center gap-3.5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo.jpg"
+              alt="Internet Aponte Plus"
+              className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl object-cover border border-white/20 shadow-md flex-shrink-0"
+              onError={(e) => {
+                (e.target as HTMLElement).style.display = "none";
+              }}
+            />
+            <div className="text-left">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 uppercase tracking-wide">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                100% Fibra Óptica
+              </span>
+              <h3 className="text-base sm:text-lg font-black text-white tracking-tight leading-snug">
+                Internet Aponte Plus
+              </h3>
+            </div>
+          </div>
+
+          {/* Titulo y Descripción */}
+          <div className="space-y-1.5 max-w-md">
+            <h4 className="text-sm sm:text-base font-bold text-cyan-100">
+              {titulo || "¡Pásate a Fibra Óptica con Alta Velocidad!"}
+            </h4>
+            <p className="text-xs sm:text-sm text-slate-300/90 leading-relaxed">
+              {descripcion ||
+                "Disfruta de la mejor conexión con máxima estabilidad, ultra velocidad y atención personalizada en tu hogar o negocio."}
+            </p>
+          </div>
+
+          {/* Botón de WhatsApp institucional */}
+          <div className="pt-2 w-full sm:w-auto">
+            <a
+              href={
+                whatsappUrl ||
+                "https://wa.me/573185577157?text=Hola%2C%20vi%20la%20promoci%C3%B3n%20en%20el%20portal%20y%20deseo%20m%C3%A1s%20informaci%C3%B3n%20sobre%20el%20servicio%20de%20internet"
+              }
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex w-full sm:w-auto items-center justify-center gap-2.5 px-6 py-3 rounded-2xl font-bold text-xs sm:text-sm bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white shadow-lg shadow-emerald-950/30 transition-all cursor-pointer"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/icons/chat-bubble.png"
+                alt="WhatsApp"
+                className="w-4 h-4 object-contain"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = "none";
+                }}
+              />
+              <span>{cleanBotonTexto}</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>

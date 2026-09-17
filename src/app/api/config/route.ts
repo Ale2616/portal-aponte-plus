@@ -32,11 +32,7 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
     bancolombia: "84758122483",
     breB: "311 276 0959",
   },
-  banners: [
-    { id: "banner-1", url: "/banner1.webp", active: true },
-    { id: "banner-2", url: "/banner2.webp", active: true },
-    { id: "banner-3", url: "/banner3.webp", active: true },
-  ],
+  banners: [],
   avisoGlobal: {
     activo: false,
     texto: "Aviso de mantenimiento programado.",
@@ -56,6 +52,18 @@ export async function GET() {
 
     let settings: GlobalSettings = DEFAULT_GLOBAL_SETTINGS;
     if (raw && typeof raw === "object") {
+      const rawBanners = Array.isArray(raw.banners) ? raw.banners : [];
+      // Filtrar de raíz cualquier banner inexistente tipo /banner1.webp o rutas vacías
+      const safeBanners = rawBanners.filter(
+        (b) =>
+          b &&
+          typeof b.url === "string" &&
+          b.url.trim() !== "" &&
+          !b.url.includes("banner1.webp") &&
+          !b.url.includes("banner2.webp") &&
+          !b.url.includes("banner3.webp")
+      );
+
       settings = {
         titular: (raw.titular || DEFAULT_GLOBAL_SETTINGS.titular).trim(),
         canalesPago: {
@@ -63,7 +71,7 @@ export async function GET() {
           bancolombia: (raw.canalesPago?.bancolombia || DEFAULT_GLOBAL_SETTINGS.canalesPago.bancolombia).trim(),
           breB: (raw.canalesPago?.breB || DEFAULT_GLOBAL_SETTINGS.canalesPago.breB).trim(),
         },
-        banners: Array.isArray(raw.banners) ? raw.banners : DEFAULT_GLOBAL_SETTINGS.banners,
+        banners: safeBanners,
         avisoGlobal: {
           activo: Boolean(raw.avisoGlobal?.activo ?? false),
           texto: (raw.avisoGlobal?.texto || DEFAULT_GLOBAL_SETTINGS.avisoGlobal.texto).trim(),

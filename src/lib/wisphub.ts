@@ -274,6 +274,7 @@ export interface WisphubServiceSummary {
   id_servicio?: string;
   id?: string;
   idCliente?: string;
+  usuario?: string;
   nombre?: string;
   nombre_completo?: string;
   direccion: string;
@@ -339,6 +340,7 @@ export async function searchWisphubServicesByDocument(cedula: string): Promise<W
           id_servicio: sId,
           id: sId,
           idCliente: String(item.id || sId),
+          usuario: s.usuario || item.usuario || undefined,
           nombre: titular,
           nombre_completo: titular,
           direccion: dir.replace(/\r\n|\r|\n/g, " - ").replace(/\s{2,}/g, " ").trim(),
@@ -384,6 +386,7 @@ export async function searchWisphubServicesByDocument(cedula: string): Promise<W
         id_servicio: sId,
         id: sId,
         idCliente: String(item.id || sId),
+        usuario: item.usuario || undefined,
         nombre: titular,
         nombre_completo: titular,
         direccion: dir.replace(/\r\n|\r|\n/g, " - ").replace(/\s{2,}/g, " ").trim(),
@@ -699,6 +702,12 @@ export async function getWisphubInvoices(
     const invUsuario = String(
       (typeof raw.cliente === "object" ? raw.cliente?.usuario : "") || ""
     ).trim();
+
+    // Si se especificó un id_servicio concreto y la factura tiene servicios vinculados explícitamente,
+    // el match debe ser estricto para evitar mezclar facturas de otras líneas de la misma cédula
+    if (targetServiceId && invServiceIds.length > 0) {
+      return invServiceIds.includes(targetServiceId) || invClientId === targetServiceId;
+    }
 
     const matchService = Boolean(targetServiceId && invServiceIds.includes(targetServiceId));
     const matchClient = Boolean(targetClientId && invClientId && invClientId === targetClientId);
@@ -1090,6 +1099,8 @@ export function mapWisphubClientToProfile(
     extractSafeString(raw.nombre_completo) ||
     [extractSafeString(raw.nombre), extractSafeString(raw.apellidos)].filter(Boolean).join(" ").trim() ||
     extractSafeString(raw.nombre) ||
+    extractSafeString(raw.usuario_rb) ||
+    extractSafeString(raw.alias) ||
     `Cliente Cédula ${cedulaStr}`;
 
   // Estado del servicio
@@ -1430,6 +1441,9 @@ export async function getClientByDocument(
     // 1. Buscar cliente en WispHub por id_servicio específico o por cédula
     let basicClient: WisphubClientItem | null = null;
     let titularClient: WisphubClientItem | null = null;
+    const matchedService = cleanServiceId
+      ? services.find((s) => String(s.idServicio || s.id_servicio || s.id) === cleanServiceId)
+      : null;
 
     if (cleanDoc) {
       try {
@@ -1439,12 +1453,26 @@ export async function getClientByDocument(
 
     if (cleanServiceId) {
       basicClient = await getWisphubClientDetail(cleanServiceId);
+      if (basicClient && matchedService) {
+        basicClient = {
+          ...basicClient,
+          usuario: matchedService.usuario || basicClient.usuario,
+          nombre: matchedService.nombre || basicClient.usuario_rb || basicClient.nombre,
+          nombre_completo: matchedService.nombre_completo || matchedService.nombre || basicClient.usuario_rb,
+          direccion: matchedService.direccion || basicClient.direccion,
+          alias: matchedService.alias || basicClient.alias,
+          plan_nombre: matchedService.planNombre || basicClient.plan_nombre,
+        };
+      } else if (basicClient && basicClient.usuario_rb && !basicClient.nombre) {
+        basicClient.nombre = basicClient.usuario_rb;
+        basicClient.nombre_completo = basicClient.usuario_rb;
+      }
     }
     if (!basicClient && titularClient) {
       basicClient = titularClient;
     }
 
-    // Si el servicio secundario no contiene el nombre del titular o cedula, recuperarlo
+    // Si el servicio secundario no contiene el nombre del titular o cedula, enriquecerlo sin sobreescribir su nombre de línea
     if (basicClient) {
       if ((!basicClient.cedula || String(basicClient.cedula).trim() === "") && cleanDoc) {
         basicClient.cedula = cleanDoc;
@@ -1453,16 +1481,18 @@ export async function getClientByDocument(
         if (!basicClient.cedula && titularClient.cedula) basicClient.cedula = titularClient.cedula;
         if (!basicClient.telefono && titularClient.telefono) basicClient.telefono = titularClient.telefono;
         if (!basicClient.celular && titularClient.celular) basicClient.celular = titularClient.celular;
+        if (!basicClient.email && titularClient.email) basicClient.email = titularClient.email;
+        if (!basicClient.correo && titularClient.correo) basicClient.correo = titularClient.correo;
         
         const realTitular = titularClient.nombre_completo || titularClient.nombre;
-        if (realTitular && (!basicClient.nombre || !basicClient.nombre_completo || basicClient.nombre.toLowerCase().includes("negocio") || basicClient.nombre.toLowerCase().includes("casa"))) {
+        if (realTitular && !basicClient.nombre && !basicClient.nombre_completo) {
           basicClient.nombre = realTitular;
           basicClient.nombre_completo = realTitular;
         }
       } else {
         const servicioTitular = services.find((s) => s.nombre || s.nombre_completo);
         if (servicioTitular && (servicioTitular.nombre || servicioTitular.nombre_completo)) {
-          basicClient.nombre = servicioTitular.nombre || servicioTitular.nombre_completo;
+          basicClient.nombre = basicClient.nombre || servicioTitular.nombre || servicioTitular.nombre_completo;
         }
       }
     }
@@ -1477,10 +1507,10 @@ export async function getClientByDocument(
 
     const serviceId = cleanServiceId || basicClient.id_servicio || basicClient.id;
 
-    // 2. Obtener detalle exhaustivo del cliente si tiene ID
+    // 2. Obtener detalle exhaustivo del cliente si tiene ID y no lo habíamos consultado
     let fullClient = basicClient;
     const detailId = cleanServiceId || basicClient.id;
-    if (detailId) {
+    if (detailId && !cleanServiceId) {
       try {
         const detailed = await getWisphubClientDetail(detailId);
         if (detailed) {
@@ -1491,15 +1521,23 @@ export async function getClientByDocument(
       }
     }
 
-    // Asegurar que fullClient mantenga cédula y datos de contacto
+    // Asegurar que fullClient mantenga cédula, dirección y datos de contacto de la línea específica
     if ((!fullClient.cedula || String(fullClient.cedula).trim() === "") && cleanDoc) {
       fullClient.cedula = cleanDoc;
+    }
+    if (matchedService) {
+      if (!fullClient.usuario && matchedService.usuario) fullClient.usuario = matchedService.usuario;
+      if (!fullClient.direccion && matchedService.direccion) fullClient.direccion = matchedService.direccion;
+      if (!fullClient.nombre && matchedService.nombre) fullClient.nombre = matchedService.nombre;
+      if (!fullClient.nombre_completo && (matchedService.nombre_completo || matchedService.nombre)) {
+        fullClient.nombre_completo = matchedService.nombre_completo || matchedService.nombre;
+      }
     }
     if (titularClient) {
       if (!fullClient.telefono && titularClient.telefono) fullClient.telefono = titularClient.telefono;
       if (!fullClient.celular && titularClient.celular) fullClient.celular = titularClient.celular;
       const realTitular = titularClient.nombre_completo || titularClient.nombre;
-      if (realTitular && (!fullClient.nombre || !fullClient.nombre_completo || fullClient.nombre.toLowerCase().includes("negocio") || fullClient.nombre.toLowerCase().includes("casa"))) {
+      if (realTitular && !fullClient.nombre && !fullClient.nombre_completo) {
         fullClient.nombre = realTitular;
         fullClient.nombre_completo = realTitular;
       }
@@ -1513,8 +1551,9 @@ export async function getClientByDocument(
 
     // 4. Consultar facturas asociadas EXCLUSIVAMENTE a este cliente y servicio
     let invoices: Invoice[] = [];
-    if (serviceId || basicClient.id || fullClient.usuario) {
-      invoices = await getWisphubInvoices(serviceId, basicClient.id, cleanDoc, fullClient.usuario);
+    const targetUser = fullClient.usuario || matchedService?.usuario || basicClient.usuario;
+    if (serviceId || basicClient.id || targetUser) {
+      invoices = await getWisphubInvoices(serviceId, basicClient.id, cleanDoc, targetUser);
     }
 
     // 4.5. Consultar historial de tráfico real mediante web scraping del panel de WispHub
@@ -1540,11 +1579,17 @@ export async function getClientByDocument(
     if ((!profile.cedula || profile.cedula.trim() === "") && cleanDoc) {
       profile.cedula = cleanDoc;
     }
+    if (matchedService?.direccion && (!profile.direccion || profile.direccion === "Dirección Urbana Registrada")) {
+      profile.direccion = matchedService.direccion;
+    }
+    if (matchedService?.nombre && (!profile.nombreCompleto || profile.nombreCompleto.toLowerCase().includes("cédula") || profile.nombreCompleto.toLowerCase().includes("cedula"))) {
+      profile.nombreCompleto = matchedService.nombre;
+    }
     if (titularClient) {
       if (!profile.telefono && titularClient.telefono) profile.telefono = String(titularClient.telefono).trim();
       if (!profile.celular && titularClient.celular) profile.celular = String(titularClient.celular).trim();
       const realTitular = titularClient.nombre_completo || titularClient.nombre;
-      if (realTitular && (!profile.nombreCompleto || profile.nombreCompleto.toLowerCase().includes("negocio") || profile.nombreCompleto.toLowerCase().includes("casa"))) {
+      if (realTitular && (!profile.nombreCompleto || profile.nombreCompleto.toLowerCase().includes("cédula") || profile.nombreCompleto.toLowerCase().includes("cedula"))) {
         profile.nombreCompleto = realTitular;
       }
     }

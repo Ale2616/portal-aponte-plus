@@ -76,9 +76,17 @@ export function SearchScreen({
     ? banner.linkWhatsapp
     : `https://wa.me/${phoneWithCountry || "573185577157"}?text=${encodeURIComponent(promoWhatsappMsg)}`;
 
+  const isCleanUrl = (url: any): boolean => {
+    if (!url || typeof url !== "string") return false;
+    const t = url.trim();
+    if (!t) return false;
+    if (t.includes("banner1.webp") || t.includes("banner2.webp") || t.includes("banner3.webp")) return false;
+    return t.startsWith("data:image/") || t.startsWith("http://") || t.startsWith("https://") || t.startsWith("/");
+  };
+
   const activeBannersFromGlobal = Array.isArray(globalSettings?.banners)
     ? globalSettings.banners
-        .filter((b: any) => (b.activo !== undefined ? b.activo === true : b.active === true) && b.url && b.url.trim() !== "")
+        .filter((b: any) => (b.activo !== undefined ? b.activo === true : b.active === true) && isCleanUrl(b.url))
         .map((b) => b.url)
     : [];
 
@@ -86,9 +94,9 @@ export function SearchScreen({
     activeBannersFromGlobal.length > 0
       ? activeBannersFromGlobal
       : Array.isArray(banner?.imageUrls)
-      ? banner.imageUrls.filter(Boolean)
-      : banner?.imageUrl
-      ? [banner.imageUrl]
+      ? banner.imageUrls.filter(isCleanUrl)
+      : isCleanUrl(banner?.imageUrl)
+      ? [banner!.imageUrl]
       : [];
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -245,7 +253,7 @@ export function SearchScreen({
         </div>
 
         {/* ─── MÓDULO DEL CARRUSEL DE PUBLICIDAD COMPLEMENTARIO ─────────────── */}
-        {Boolean(banner?.enabled && bannerImages.length > 0) && (
+        {Boolean(banner?.enabled) && (
           <div className="pt-4 border-t border-slate-200/60 dark:border-slate-800/70 space-y-2">
             <HomeAdCarousel
               images={bannerImages}

@@ -62,6 +62,7 @@ function PortalContent() {
   const [originalClient, setOriginalClient] = useState<any>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingInvoices, setIsLoadingInvoices] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasResetConsultation, setHasResetConsultation] = useState(false);
 
@@ -69,6 +70,9 @@ function PortalContent() {
   const [multipleServices, setMultipleServices] = useState<ServiceOption[]>([]);
   const [isMultiLineModalOpen, setIsMultiLineModalOpen] = useState(false);
   const [pendingDocument, setPendingDocument] = useState<string>("");
+
+  // Overlay bloqueante de cambio de línea de servicio
+  const [cambiandoServicio, setCambiandoServicio] = useState(false);
 
   // Modals state
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -163,34 +167,26 @@ function PortalContent() {
           }
         }
 
-        // Obtener el nombre del titular desde la respuesta principal o estado previo
-        const nombreTitular =
+        // Obtener el nombre específico de la línea o servicio seleccionado
+        const nombreFinal =
           preservedNombre ||
-          originalClient?.nombre ||
-          originalClient?.nombreCompleto ||
-          originalClient?.nombre_completo ||
+          data.cliente?.nombreCompleto ||
           data.nombre ||
           data.nombreTitular ||
-          data.cliente?.nombre ||
-          data.cliente?.nombreCompleto ||
-          "";
+          originalClient?.nombreCompleto ||
+          "Cliente Registrado";
 
         const clienteActivo: ClientProfile = {
           ...data.cliente,
           cedula: cleanDoc || data.cliente?.cedula || data.cedula || originalClient?.cedula || "",
           telefono: data.cliente?.telefono || originalClient?.telefono || "",
           celular: data.cliente?.celular || originalClient?.celular || "",
-          nombreCompleto:
-            nombreTitular && (!data.cliente?.nombreCompleto || data.cliente.nombreCompleto.toLowerCase().includes("cédula") || data.cliente.nombreCompleto.toLowerCase().includes("cedula"))
-              ? nombreTitular
-              : data.cliente?.nombreCompleto || nombreTitular || "Cliente Registrado",
+          nombreCompleto: nombreFinal,
         };
         (clienteActivo as any).nombre = clienteActivo.nombreCompleto;
         (clienteActivo as any).id_servicio = effectiveServiceId;
 
-        if (clienteActivo.nombreCompleto && !clienteActivo.nombreCompleto.toLowerCase().includes("cédula")) {
-          setOriginalClient((prev: any) => prev || clienteActivo);
-        }
+        setOriginalClient(clienteActivo);
 
         setClient(clienteActivo);
         let clientInvoices = data.facturas || [];
@@ -258,10 +254,86 @@ function PortalContent() {
     [originalClient]
   );
 
-  // 2. Solución: Preservar el Nombre del Titular en la Selección Multi-Línea
+  // Consulta en tiempo real de facturas vinculada al id_servicio activo y a la cédula
+  const cargarFacturasPorServicio = useCallback(async (idServicio: string, cedula: string) => {
+    if (!idServicio && !cedula) return;
+    setIsLoadingInvoices(true);
+    try {
+      const fParams = new URLSearchParams();
+      if (idServicio) fParams.set("id_servicio", String(idServicio));
+      if (cedula) fParams.set("cedula", String(cedula));
+      fParams.set("_t", Date.now().toString());
+
+      const res = await fetch(`/api/facturas?${fParams.toString()}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
+
+      if (!res.ok) {
+        console.warn(`[cargarFacturasPorServicio] Error HTTP ${res.status}`);
+        return;
+      }
+
+      const data = await res.json();
+      if (data.success && Array.isArray(data.facturas)) {
+        const facturas: Invoice[] = data.facturas;
+        setInvoices(facturas);
+
+        // Actualizar el saldo pendiente exacto de esta línea seleccionada
+        const facturasPendientes = facturas.filter((i: Invoice) => {
+          const est = String(i.estado || "").toLowerCase().trim();
+          const isPaid =
+            est === "pagada" ||
+            est === "pago" ||
+            est === "pagado" ||
+            est === "cancelada" ||
+            est === "cobrada" ||
+            (i.saldoPendiente === 0 && i.total > 0);
+          return !isPaid && (i.saldoPendiente > 0 || est === "pendiente" || est === "vencida");
+        });
+
+        const nuevoSaldo = facturasPendientes.reduce(
+          (acc: number, inv: Invoice) => acc + (inv.saldoPendiente || inv.total || 0),
+          0
+        );
+
+        setClient((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            saldoTotalPendiente: nuevoSaldo,
+            facturasPendientesCount: facturasPendientes.length,
+          };
+        });
+      }
+    } catch (err) {
+      console.warn("[cargarFacturasPorServicio Warning]:", err);
+    } finally {
+      setIsLoadingInvoices(false);
+    }
+  }, []);
+
+  // Sincronización en tiempo real de facturas vinculada al id_servicio activo además de la cédula
+  useEffect(() => {
+    const serviceId = (client as any)?.id_servicio || client?.servicio?.idServicio || client?.id;
+    const doc = client?.cedula || pendingDocument || "";
+    if (serviceId && doc) {
+      cargarFacturasPorServicio(String(serviceId), doc);
+    }
+  }, [(client as any)?.id_servicio, client?.id]);
+
+  // 2. Cambio de Línea Multi-Servicio: Overlay bloqueante + nombre de la línea seleccionada + ciclo completo
   const handleSelectService = useCallback(
-    (servicioSeleccionado: ServiceOption) => {
+    async (servicioSeleccionado: ServiceOption) => {
+      // 1. Cerrar modal y activar overlay bloqueante
       setIsMultiLineModalOpen(false);
+      setCambiandoServicio(true);
+
+      // 2. Limpieza inmediata de estados anteriores para no mostrar datos cruzados
+      setInvoices([]);
+      setIsLoadingInvoices(true);
+      setPaymentReportSuccessData(null);
+
       const targetDoc =
         pendingDocument ||
         client?.cedula ||
@@ -270,28 +342,30 @@ function PortalContent() {
         servicioSeleccionado.id_servicio || servicioSeleccionado.idServicio || servicioSeleccionado.id || ""
       );
 
-      // 1. Obtener el nombre del titular desde la respuesta principal de la consulta
-      const nombreTitular =
-        originalClient?.nombre ||
-        originalClient?.nombreCompleto ||
-        originalClient?.nombre_completo ||
-        client?.nombreCompleto ||
-        (client as any)?.nombre ||
+      // 3. NOMBRE ESPECÍFICO DE LA LÍNEA SELECCIONADA (prioridad: nombre de la tarjeta, no del titular original)
+      const nombreLineaSeleccionada =
         servicioSeleccionado.nombre ||
         servicioSeleccionado.nombre_completo ||
-        "";
+        (servicioSeleccionado as any).alias ||
+        originalClient?.nombre ||
+        originalClient?.nombreCompleto ||
+        client?.nombreCompleto ||
+        "Cliente Registrado";
 
-      // 2. Fusionar los datos de la línea sin perder el nombre del cliente
-      if (client || originalClient) {
-        const baseClient = originalClient || client;
+      // 4. Establecer el nuevo clienteActivo con datos exactos del contrato seleccionado
+      const baseClient = originalClient || client;
+      if (baseClient) {
         const updatedClient: ClientProfile = {
           ...baseClient,
           ...servicioSeleccionado,
+          id: selectedServiceId || baseClient.id,
           cedula: targetDoc || baseClient.cedula,
           telefono: baseClient.telefono || "",
           celular: baseClient.celular || "",
-          nombreCompleto: nombreTitular || baseClient.nombreCompleto,
+          nombreCompleto: nombreLineaSeleccionada,
           direccion: servicioSeleccionado.direccion || baseClient.direccion,
+          saldoTotalPendiente: 0,
+          facturasPendientesCount: 0,
           plan: {
             ...(baseClient.plan || {}),
             nombre:
@@ -316,13 +390,14 @@ function PortalContent() {
             diaPago: baseClient.servicio?.diaPago || 1,
           },
         };
-        (updatedClient as any).nombre = nombreTitular;
+        (updatedClient as any).nombre = nombreLineaSeleccionada;
         (updatedClient as any).id_servicio = selectedServiceId;
         (updatedClient as any).direccion = servicioSeleccionado.direccion;
-        (updatedClient as any).alias = servicioSeleccionado.alias;
+        (updatedClient as any).alias = (servicioSeleccionado as any).alias;
         setClient(updatedClient);
       }
 
+      // 5. Persistir en localStorage y actualizar URL sin recargar
       if (typeof window !== "undefined") {
         try {
           if (targetDoc) localStorage.setItem("cliente_cedula", targetDoc);
@@ -330,11 +405,27 @@ function PortalContent() {
         } catch (e) {
           console.warn("[localStorage error]:", e);
         }
+        const newUrl = new URL(window.location.href);
+        newUrl.pathname = "/";
+        newUrl.searchParams.set("cedula", targetDoc);
+        if (selectedServiceId) newUrl.searchParams.set("id_servicio", selectedServiceId);
+        window.history.replaceState({}, "", newUrl.toString());
       }
 
-      handleSearch(targetDoc, selectedServiceId, nombreTitular);
+      // 6. Ejecutar consultas en paralelo: facturas + datos completos del servicio
+      try {
+        await Promise.all([
+          cargarFacturasPorServicio(selectedServiceId, targetDoc),
+          handleSearch(targetDoc, selectedServiceId, nombreLineaSeleccionada),
+        ]);
+      } catch (err) {
+        console.warn("[handleSelectService] Error en sincronización:", err);
+      } finally {
+        // 7. Desactivar overlay bloqueante
+        setCambiandoServicio(false);
+      }
     },
-    [pendingDocument, client, originalClient, handleSearch]
+    [pendingDocument, client, originalClient, cargarFacturasPorServicio, handleSearch]
   );
 
   // 1. Carga automática al abrir el portal (Auto-Login por URL ?cedula= o por localStorage)
@@ -443,6 +534,18 @@ function PortalContent() {
 
   return (
     <div className="min-h-[100dvh] w-full overflow-x-hidden flex flex-col justify-between bg-gradient-to-b from-slate-50 via-sky-50/20 to-slate-100 dark:from-[#060913] dark:via-[#081020] dark:to-[#05070f] text-slate-900 dark:text-slate-100 transition-colors relative">
+      {/* Overlay bloqueante de cambio de línea de servicio */}
+      {cambiandoServicio && (
+        <div className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-md flex flex-col items-center justify-center select-none cursor-wait">
+          <div className="relative flex items-center justify-center">
+            <div className="w-16 h-16 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
+            <div className="absolute w-8 h-8 border-4 border-cyan-400/20 border-b-cyan-400 rounded-full animate-spin [animation-direction:reverse]" />
+          </div>
+          <h3 className="mt-4 text-white font-bold text-base tracking-wide">Cargando línea de servicio...</h3>
+          <p className="text-slate-400 text-xs mt-1">Sincronizando facturación, consumos y estado de red</p>
+        </div>
+      )}
+
       {/* Esferas de iluminación ambiental difusa (Dark tech / Telecomunicaciones fibra óptica) */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden z-0">
         {/* Esfera superior izquierda: Azul eléctrico (#0284c7) */}
@@ -558,6 +661,7 @@ function PortalContent() {
             {/* 5. Historial Completo de Facturas con Pestañas */}
             <InvoiceList
               invoices={invoices}
+              isLoading={isLoadingInvoices}
               onViewPdf={(invoice) => setSelectedInvoiceForPdf(invoice)}
               onPayInvoice={(invoice) => handleOpenPayment(invoice)}
             />

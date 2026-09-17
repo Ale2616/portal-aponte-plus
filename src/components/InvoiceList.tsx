@@ -11,10 +11,12 @@ import {
   AlertCircle,
   FileText,
   History,
+  Loader2,
 } from "lucide-react";
 
 interface InvoiceListProps {
   invoices: Invoice[];
+  isLoading?: boolean;
   onViewPdf: (invoice: Invoice) => void;
   onPayInvoice: (invoice: Invoice) => void;
 }
@@ -61,7 +63,7 @@ export function formatPeriodoLabel(periodo?: string, fallbackDate?: string): str
   return periodo || "Mes Facturado";
 }
 
-export function InvoiceList({ invoices, onViewPdf, onPayInvoice }: InvoiceListProps) {
+export function InvoiceList({ invoices, isLoading = false, onViewPdf, onPayInvoice }: InvoiceListProps) {
   const [activeTab, setActiveTab] = useState<"pendientes" | "historial">("pendientes");
 
   const isPaidInvoice = (i: Invoice) => {
@@ -148,9 +150,21 @@ export function InvoiceList({ invoices, onViewPdf, onPayInvoice }: InvoiceListPr
       </div>
 
       {/* ======================================================== */}
-      {/* PESTAÑA 1: FACTURAS PENDIENTES (LISTADO MULTI-FACTURA)   */}
+      {/* VISTA DE CARGA O PESTAÑAS DE FACTURACIÓN                 */}
       {/* ======================================================== */}
-      {activeTab === "pendientes" && (
+      {isLoading && (
+        <div className="text-center py-12 px-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3.5 animate-in fade-in duration-200">
+          <Loader2 className="w-8 h-8 mx-auto text-sky-500 animate-spin" />
+          <h4 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-200">
+            Sincronizando facturas en tiempo real...
+          </h4>
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+            Consultando el estado de cuenta y recibos correspondientes al servicio seleccionado en WispHub.
+          </p>
+        </div>
+      )}
+
+      {!isLoading && activeTab === "pendientes" && (
         <div className="space-y-4 animate-in fade-in duration-200">
           {pendingInvoices.length === 0 ? (
             /* Estado Al Día: No hay facturas pendientes */
@@ -301,7 +315,7 @@ export function InvoiceList({ invoices, onViewPdf, onPayInvoice }: InvoiceListPr
       {/* ======================================================== */}
       {/* PESTAÑA 2: HISTORIAL DE PAGOS (WISPHUB)                  */}
       {/* ======================================================== */}
-      {activeTab === "historial" && (
+      {!isLoading && activeTab === "historial" && (
         <div className="space-y-4 animate-in fade-in duration-200">
           <div className="flex items-center justify-between gap-3">
             <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">

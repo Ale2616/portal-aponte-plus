@@ -62,11 +62,21 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
               bancolombia: (data.canalesPago?.bancolombia || data.settings?.canalesPago?.bancolombia || DEFAULT_GLOBAL_SETTINGS.canalesPago.bancolombia).trim(),
               breB: (data.canalesPago?.breB || data.settings?.canalesPago?.breB || DEFAULT_GLOBAL_SETTINGS.canalesPago.breB).trim(),
             },
-            banners: Array.isArray(data.banners)
-              ? data.banners
-              : Array.isArray(data.settings?.banners)
-              ? data.settings.banners
-              : DEFAULT_GLOBAL_SETTINGS.banners,
+            banners: (
+              Array.isArray(data.banners)
+                ? data.banners
+                : Array.isArray(data.settings?.banners)
+                ? data.settings.banners
+                : []
+            ).filter(
+              (b: any) =>
+                b &&
+                typeof b.url === "string" &&
+                b.url.trim() !== "" &&
+                !b.url.includes("banner1.webp") &&
+                !b.url.includes("banner2.webp") &&
+                !b.url.includes("banner3.webp")
+            ),
             avisoGlobal: {
               activo: Boolean(data.avisoGlobal?.activo ?? data.settings?.avisoGlobal?.activo ?? false),
               texto: (data.avisoGlobal?.texto || data.settings?.avisoGlobal?.texto || DEFAULT_GLOBAL_SETTINGS.avisoGlobal.texto).trim(),

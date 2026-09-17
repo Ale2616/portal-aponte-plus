@@ -214,6 +214,16 @@ export function PaymentModal({
     }
   }, [isOpen, activeInvoice, setValue]);
 
+  // Bloqueo estricto del scroll del fondo (body scroll-lock) respetando la regla de Hooks
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isOpen]);
+
   const handleMontoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const rawInput = e.target.value;
     const digitsOnly = rawInput.replace(/\D/g, "");
@@ -229,8 +239,6 @@ export function PaymentModal({
     setMontoDisplay(formatted);
     setValue("monto", numericVal, { shouldValidate: true });
   };
-
-  if (!isOpen) return null;
 
   const handleCopyAccount = () => {
     if (!currentAccountNumber) return;
@@ -333,20 +341,6 @@ export function PaymentModal({
     }
   };
 
-  // Bloqueo estricto del scroll del fondo (body scroll-lock)
-  useEffect(() => {
-    if (isOpen) {
-      const originalOverflow = document.body.style.overflow;
-      document.body.style.overflow = "hidden";
-      document.documentElement.style.overflow = "hidden";
-
-      return () => {
-        document.body.style.overflow = originalOverflow || "unset";
-        document.documentElement.style.overflow = "";
-      };
-    }
-  }, [isOpen]);
-
   const handleModalClose = () => {
     reset();
     setSelectedFile(null);
@@ -354,6 +348,8 @@ export function PaymentModal({
     setMontoDisplay(formatThousands(activeInvoice?.saldoPendiente || 0));
     onClose();
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/70 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
