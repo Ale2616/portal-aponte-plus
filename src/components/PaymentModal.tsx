@@ -358,7 +358,7 @@ export function PaymentModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 flex items-center justify-center">
               <ReceiptText className="w-4 h-4" strokeWidth={1.75} />
@@ -383,7 +383,7 @@ export function PaymentModal({
         </div>
 
         {/* Modal Content */}
-        <div className="p-6 overflow-y-auto space-y-5">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-5">
           {successData ? (
             /* Pantalla de Éxito */
             <div className="text-center py-4 space-y-5 animate-in zoom-in-95 duration-200">
@@ -481,7 +481,7 @@ export function PaymentModal({
                       </option>
                     ))
                   ) : (
-                    <option value="">No hay facturas pendientes registradas</option>
+                    <option value="">No hay facturas pendientes</option>
                   )}
                 </select>
                 {errors.id_factura && (
@@ -494,46 +494,67 @@ export function PaymentModal({
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
                   Canal de Pago Utilizado <span className="text-rose-500">*</span>
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                   {branding.paymentMethods.map((m) => {
                     const isSelected = currentMethodId === m.id;
                     const isNequi = m.id.includes("nequi") || m.id.includes("bre-b");
-                    const numDisplay =
-                      isNequi && config.companyInfo.nequiNumber
-                        ? config.companyInfo.nequiNumber
-                        : m.accountNumber;
+                    
+                    let numDisplay = m.accountNumber;
+                    if (m.id === "nequi" && globalSettings?.canalesPago?.nequi) {
+                      numDisplay = globalSettings.canalesPago.nequi;
+                    } else if (m.id === "bancolombia" && globalSettings?.canalesPago?.bancolombia) {
+                      numDisplay = globalSettings.canalesPago.bancolombia;
+                    } else if (m.id === "breb" && globalSettings?.canalesPago?.breB) {
+                      numDisplay = globalSettings.canalesPago.breB;
+                    } else if (isNequi && config.companyInfo.nequiNumber) {
+                      numDisplay = config.companyInfo.nequiNumber;
+                    }
 
                     return (
                       <button
                         key={m.id}
                         type="button"
                         onClick={() => setValue("metodo_pago", m.id)}
-                        className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                        className={`p-2 sm:p-2.5 rounded-2xl border text-left flex flex-col justify-between transition-all cursor-pointer min-w-0 ${
                           isSelected
-                            ? "border-slate-900 dark:border-slate-400 bg-slate-100 dark:bg-slate-800 ring-1 ring-slate-900/10 dark:ring-slate-400/20"
+                            ? "border-slate-900 dark:border-slate-300 bg-slate-100/90 dark:bg-slate-800 shadow-xs ring-1 ring-slate-900/15 dark:ring-slate-300/25"
                             : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700"
                         }`}
                       >
-                        <div className="flex items-center gap-1.5">
-                          {m.iconUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={m.iconUrl}
-                              alt={m.name}
-                              className="w-4 h-4 object-contain flex-shrink-0"
-                            />
-                          ) : m.iconName === "QrCode" ? (
-                            <QrCode className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" strokeWidth={1.75} />
+                        {/* Fila superior: Ícono y estado de selección */}
+                        <div className="flex items-center justify-between w-full mb-1 sm:mb-1.5">
+                          <div className="w-6 h-6 rounded-lg bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 flex items-center justify-center flex-shrink-0 shadow-2xs">
+                            {m.iconUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={m.iconUrl}
+                                alt={m.name}
+                                className="w-4 h-4 object-contain"
+                              />
+                            ) : m.iconName === "QrCode" ? (
+                              <QrCode className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" strokeWidth={1.75} />
+                            ) : (
+                              <Smartphone className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" strokeWidth={1.75} />
+                            )}
+                          </div>
+                          {isSelected ? (
+                            <div className="w-4 h-4 rounded-full bg-slate-900 dark:bg-slate-100 flex items-center justify-center flex-shrink-0">
+                              <Check className="w-2.5 h-2.5 text-white dark:text-slate-900" strokeWidth={2.5} />
+                            </div>
                           ) : (
-                            <Smartphone className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" strokeWidth={1.75} />
+                            <div className="w-3.5 h-3.5 rounded-full border border-slate-300 dark:border-slate-600 flex-shrink-0" />
                           )}
-                          <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                        </div>
+
+                        {/* Nombre del canal (con ancho completo para evitar truncado) y número */}
+                        <div className="w-full min-w-0">
+                          <span className="text-[11.5px] sm:text-xs font-bold text-slate-900 dark:text-slate-100 tracking-tight block truncate">
                             {m.shortName}
                           </span>
+                          <span className="text-[9.5px] sm:text-[10px] text-slate-500 dark:text-slate-400 font-sans font-medium tracking-tight tabular-nums block truncate mt-0.5">
+                            {numDisplay}
+                          </span>
                         </div>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-sans font-semibold tracking-tight tabular-nums mt-1 truncate">
-                          {numDisplay}
-                        </span>
                       </button>
                     );
                   })}
@@ -555,7 +576,7 @@ export function PaymentModal({
                   <button
                     type="button"
                     onClick={handleCopyAccount}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                       copiedAccount
                         ? "bg-emerald-600 text-white"
                         : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
