@@ -494,7 +494,7 @@ export function PaymentModal({
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
                   Canal de Pago Utilizado <span className="text-rose-500">*</span>
                 </label>
-                <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+                <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
                   {branding.paymentMethods.map((m) => {
                     const isSelected = currentMethodId === m.id;
                     const isNequi = m.id.includes("nequi") || m.id.includes("bre-b");
@@ -515,43 +515,43 @@ export function PaymentModal({
                         key={m.id}
                         type="button"
                         onClick={() => setValue("metodo_pago", m.id)}
-                        className={`p-2 sm:p-2.5 rounded-2xl border text-left flex flex-col justify-between transition-all cursor-pointer min-w-0 ${
+                        className={`p-2 sm:p-3.5 rounded-2xl border text-left flex flex-col justify-between transition-all cursor-pointer min-w-0 ${
                           isSelected
                             ? "border-slate-900 dark:border-slate-300 bg-slate-100/90 dark:bg-slate-800 shadow-xs ring-1 ring-slate-900/15 dark:ring-slate-300/25"
                             : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700"
                         }`}
                       >
                         {/* Fila superior: Ícono y estado de selección */}
-                        <div className="flex items-center justify-between w-full mb-1 sm:mb-1.5">
-                          <div className="w-6 h-6 rounded-lg bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 flex items-center justify-center flex-shrink-0 shadow-2xs">
+                        <div className="flex items-center justify-between w-full mb-1.5 sm:mb-2.5">
+                          <div className="w-7 h-7 sm:w-11 sm:h-11 rounded-lg sm:rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 flex items-center justify-center p-1 sm:p-1.5 flex-shrink-0 shadow-2xs">
                             {m.iconUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img
                                 src={m.iconUrl}
                                 alt={m.name}
-                                className="w-4 h-4 object-contain"
+                                className="w-5 h-5 sm:w-7 sm:h-7 object-contain"
                               />
                             ) : m.iconName === "QrCode" ? (
-                              <QrCode className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" strokeWidth={1.75} />
+                              <QrCode className="w-4 h-4 sm:w-6 sm:h-6 text-slate-500 dark:text-slate-400" strokeWidth={1.75} />
                             ) : (
-                              <Smartphone className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" strokeWidth={1.75} />
+                              <Smartphone className="w-4 h-4 sm:w-6 sm:h-6 text-slate-500 dark:text-slate-400" strokeWidth={1.75} />
                             )}
                           </div>
                           {isSelected ? (
-                            <div className="w-4 h-4 rounded-full bg-slate-900 dark:bg-slate-100 flex items-center justify-center flex-shrink-0">
-                              <Check className="w-2.5 h-2.5 text-white dark:text-slate-900" strokeWidth={2.5} />
+                            <div className="w-4 h-4 sm:w-5.5 sm:h-5.5 rounded-full bg-slate-900 dark:bg-slate-100 flex items-center justify-center flex-shrink-0">
+                              <Check className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 text-white dark:text-slate-900" strokeWidth={2.5} />
                             </div>
                           ) : (
-                            <div className="w-3.5 h-3.5 rounded-full border border-slate-300 dark:border-slate-600 flex-shrink-0" />
+                            <div className="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5 rounded-full border border-slate-300 dark:border-slate-600 flex-shrink-0" />
                           )}
                         </div>
 
-                        {/* Nombre del canal (con ancho completo para evitar truncado) y número */}
+                        {/* Nombre del canal y número */}
                         <div className="w-full min-w-0">
-                          <span className="text-[11.5px] sm:text-xs font-bold text-slate-900 dark:text-slate-100 tracking-tight block truncate">
+                          <span className="text-[11.5px] sm:text-sm font-bold text-slate-900 dark:text-slate-100 tracking-tight block truncate">
                             {m.shortName}
                           </span>
-                          <span className="text-[9.5px] sm:text-[10px] text-slate-500 dark:text-slate-400 font-sans font-medium tracking-tight tabular-nums block truncate mt-0.5">
+                          <span className="text-[9.5px] sm:text-xs text-slate-500 dark:text-slate-400 font-sans font-medium tracking-tight tabular-nums block truncate mt-0.5 sm:mt-1">
                             {numDisplay}
                           </span>
                         </div>
