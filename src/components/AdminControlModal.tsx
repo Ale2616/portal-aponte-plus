@@ -71,21 +71,26 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
   const [supportPhone, setSupportPhone] = useState(config.companyInfo.supportPhone);
 
   // Banner textos y visualización
-  const [bannerEnabled, setBannerEnabled] = useState(config.homeAdBanner?.enabled ?? true);
+  const [bannerEnabled, setBannerEnabled] = useState(
+    globalSettings.bannerConfig?.enabled ?? config.homeAdBanner?.enabled ?? true
+  );
   const [newImageUrlInput, setNewImageUrlInput] = useState("");
   const [bannerTitulo, setBannerTitulo] = useState(
-    config.homeAdBanner?.titulo ?? "¡Pásate a Fibra Óptica con Alta Velocidad!"
+    globalSettings.bannerConfig?.titulo ?? config.homeAdBanner?.titulo ?? DEFAULT_GLOBAL_SETTINGS.bannerConfig!.titulo
   );
   const [bannerDescripcion, setBannerDescripcion] = useState(
-    config.homeAdBanner?.descripcion ??
-      "Disfruta de la mejor conexión de la región con 100% fibra óptica dedicada."
+    globalSettings.bannerConfig?.descripcion ?? config.homeAdBanner?.descripcion ?? DEFAULT_GLOBAL_SETTINGS.bannerConfig!.descripcion
   );
   const [bannerBotonTexto, setBannerBotonTexto] = useState(
-    (config.homeAdBanner?.botonTexto ?? "Preguntar por WhatsApp").replace(/📲/g, "").replace(/💬/g, "").trim() || "Preguntar por WhatsApp"
+    (globalSettings.bannerConfig?.botonTexto ?? config.homeAdBanner?.botonTexto ?? DEFAULT_GLOBAL_SETTINGS.bannerConfig!.botonTexto)
+      .replace(/📲/g, "")
+      .replace(/💬/g, "")
+      .trim() || "Preguntar por WhatsApp"
   );
   const [bannerWhatsappMensaje, setBannerWhatsappMensaje] = useState(
-    config.homeAdBanner?.whatsappMensaje ??
-      "Hola, vi la promoción en el portal y deseo más información sobre el servicio de internet"
+    globalSettings.bannerConfig?.whatsappMensaje ??
+      config.homeAdBanner?.whatsappMensaje ??
+      DEFAULT_GLOBAL_SETTINGS.bannerConfig!.whatsappMensaje
   );
 
   const wasOpenRef = useRef(false);
@@ -112,17 +117,18 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
       setAlertEnabled(globalSettings.avisoGlobal?.activo ?? false);
       setAlertMessage(globalSettings.avisoGlobal?.texto || DEFAULT_GLOBAL_SETTINGS.avisoGlobal.texto);
 
-      setCompanyName(config.companyInfo.companyName);
-      setSupportPhone(config.companyInfo.supportPhone);
+      const bConf = globalSettings.bannerConfig || DEFAULT_GLOBAL_SETTINGS.bannerConfig!;
+      const cInfo = globalSettings.companyInfo || DEFAULT_GLOBAL_SETTINGS.companyInfo!;
+
+      setCompanyName(cInfo.companyName || config.companyInfo.companyName);
+      setSupportPhone(cInfo.supportPhone || config.companyInfo.supportPhone);
       setAlertType(config.globalAlert.type);
 
-      if (config.homeAdBanner) {
-        setBannerEnabled(config.homeAdBanner.enabled);
-        setBannerTitulo(config.homeAdBanner.titulo);
-        setBannerDescripcion(config.homeAdBanner.descripcion);
-        setBannerBotonTexto(config.homeAdBanner.botonTexto);
-        setBannerWhatsappMensaje(config.homeAdBanner.whatsappMensaje);
-      }
+      setBannerEnabled(bConf.enabled !== undefined ? bConf.enabled : (config.homeAdBanner?.enabled ?? true));
+      setBannerTitulo(bConf.titulo || config.homeAdBanner?.titulo || DEFAULT_GLOBAL_SETTINGS.bannerConfig!.titulo);
+      setBannerDescripcion(bConf.descripcion || config.homeAdBanner?.descripcion || DEFAULT_GLOBAL_SETTINGS.bannerConfig!.descripcion);
+      setBannerBotonTexto((bConf.botonTexto || config.homeAdBanner?.botonTexto || DEFAULT_GLOBAL_SETTINGS.bannerConfig!.botonTexto).replace(/📲/g, "").replace(/💬/g, "").trim() || "Preguntar por WhatsApp");
+      setBannerWhatsappMensaje(bConf.whatsappMensaje || config.homeAdBanner?.whatsappMensaje || DEFAULT_GLOBAL_SETTINGS.bannerConfig!.whatsappMensaje);
     }
 
     wasOpenRef.current = isOpen;
@@ -263,7 +269,7 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
 
       const activeBanners = validBanners.filter((b) => b.active);
 
-      const payload = {
+      const payload: any = {
         pin: "1130",
         titular: (titular || DEFAULT_GLOBAL_SETTINGS.titular).trim(),
         canalesPago: {
@@ -275,6 +281,17 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
         avisoGlobal: {
           activo: Boolean(alertEnabled),
           texto: (alertMessage || DEFAULT_GLOBAL_SETTINGS.avisoGlobal.texto).trim(),
+        },
+        bannerConfig: {
+          enabled: Boolean(bannerEnabled),
+          titulo: (bannerTitulo || DEFAULT_GLOBAL_SETTINGS.bannerConfig!.titulo).trim(),
+          descripcion: (bannerDescripcion || DEFAULT_GLOBAL_SETTINGS.bannerConfig!.descripcion).trim(),
+          botonTexto: (bannerBotonTexto || DEFAULT_GLOBAL_SETTINGS.bannerConfig!.botonTexto).trim(),
+          whatsappMensaje: waMsg,
+        },
+        companyInfo: {
+          companyName: (companyName || DEFAULT_GLOBAL_SETTINGS.companyInfo!.companyName).trim(),
+          supportPhone: (supportPhone || DEFAULT_GLOBAL_SETTINGS.companyInfo!.supportPhone).trim(),
         },
       };
 
@@ -303,12 +320,7 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
       }
 
       // 2. Sincronizar en el Contexto Global
-      await saveGlobalSettings({
-        titular: payload.titular,
-        canalesPago: payload.canalesPago,
-        banners: payload.banners,
-        avisoGlobal: payload.avisoGlobal,
-      });
+      await saveGlobalSettings(payload);
 
       // 3. Sincronizar datos complementarios en /api/configuracion
       try {
@@ -531,19 +543,31 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
                 </div>
 
                 <div className="flex items-center gap-3 bg-slate-900/90 px-4 py-2 rounded-xl border border-slate-700/80 self-start sm:self-auto">
-                  <span className={`text-xs font-bold ${bannerEnabled && bannerImageUrls.length > 0 ? "text-emerald-400" : "text-slate-400"}`}>
-                    {bannerEnabled && bannerImageUrls.length > 0 ? "Visible en Inicio" : "Banner Oculto"}
+                  <span className={`text-xs font-bold ${bannerEnabled ? "text-emerald-400" : "text-slate-400"}`}>
+                    {bannerEnabled
+                      ? bannerImageUrls.length > 0
+                        ? "Visible en Inicio"
+                        : "Habilitado (Sube 1 foto)"
+                      : "Banner Oculto"}
                   </span>
                   <button
                     type="button"
-                    onClick={() => setBannerEnabled(!bannerEnabled)}
+                    onClick={() => {
+                      const next = !bannerEnabled;
+                      setBannerEnabled(next);
+                      if (next && bannerImageUrls.length === 0) {
+                        toast.info("Banner activado. Añade al menos 1 imagen para que se visualice en el portal.", {
+                          description: "Puedes subir fotos desde tu equipo o pegar una URL directa.",
+                        });
+                      }
+                    }}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
-                      bannerEnabled && bannerImageUrls.length > 0 ? "bg-emerald-500" : "bg-slate-700"
+                      bannerEnabled ? "bg-emerald-500" : "bg-slate-700"
                     }`}
                   >
                     <span
                       className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        bannerEnabled && bannerImageUrls.length > 0 ? "translate-x-6" : "translate-x-1"
+                        bannerEnabled ? "translate-x-6" : "translate-x-1"
                       }`}
                     />
                   </button>

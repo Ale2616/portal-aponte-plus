@@ -44,6 +44,14 @@ export interface BannerItem {
   active: boolean;
 }
 
+export interface BannerConfig {
+  enabled: boolean;
+  titulo: string;
+  descripcion: string;
+  botonTexto: string;
+  whatsappMensaje: string;
+}
+
 export interface GlobalSettings {
   titular: string; // ej. "Andrés Aponte / Aponte Plus"
   canalesPago: {
@@ -55,6 +63,11 @@ export interface GlobalSettings {
   avisoGlobal: {
     activo: boolean;
     texto: string;
+  };
+  bannerConfig?: BannerConfig;
+  companyInfo?: {
+    companyName: string;
+    supportPhone: string;
   };
 }
 
@@ -69,6 +82,17 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   avisoGlobal: {
     activo: false,
     texto: "Aviso de mantenimiento programado.",
+  },
+  bannerConfig: {
+    enabled: true,
+    titulo: "¡Pásate a Fibra Óptica con Alta Velocidad!",
+    descripcion: "Disfruta de la mejor conexión de la región con 100% fibra óptica dedicada.",
+    botonTexto: "Preguntar por WhatsApp",
+    whatsappMensaje: "Hola, vi la promoción en el portal y deseo más información sobre el servicio de internet",
+  },
+  companyInfo: {
+    companyName: "Internet Aponte Plus",
+    supportPhone: "3185577157",
   },
 };
 

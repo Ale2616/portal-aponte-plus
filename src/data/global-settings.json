@@ -1,0 +1,24 @@
+{
+  "titular": "Andrés Aponte / Aponte Plus",
+  "canalesPago": {
+    "nequi": "311 276 0959",
+    "bancolombia": "84758122483",
+    "breB": "311 276 0959"
+  },
+  "banners": [],
+  "avisoGlobal": {
+    "activo": false,
+    "texto": "Aviso de mantenimiento programado."
+  },
+  "bannerConfig": {
+    "enabled": true,
+    "titulo": "¡Pásate a Fibra Óptica con Alta Velocidad!",
+    "descripcion": "Disfruta de la mejor conexión de la región con 100% fibra óptica dedicada.",
+    "botonTexto": "Preguntar por WhatsApp",
+    "whatsappMensaje": "Hola, vi la promoción en el portal y deseo más información sobre el servicio de internet"
+  },
+  "companyInfo": {
+    "companyName": "Internet Aponte Plus",
+    "supportPhone": "3185577157"
+  }
+}

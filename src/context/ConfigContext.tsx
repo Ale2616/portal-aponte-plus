@@ -81,6 +81,8 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
               activo: Boolean(data.avisoGlobal?.activo ?? data.settings?.avisoGlobal?.activo ?? false),
               texto: (data.avisoGlobal?.texto || data.settings?.avisoGlobal?.texto || DEFAULT_GLOBAL_SETTINGS.avisoGlobal.texto).trim(),
             },
+            bannerConfig: data.bannerConfig || data.settings?.bannerConfig || DEFAULT_GLOBAL_SETTINGS.bannerConfig,
+            companyInfo: data.companyInfo || data.settings?.companyInfo || DEFAULT_GLOBAL_SETTINGS.companyInfo,
           };
 
           setGlobalSettings(rawSettings);
@@ -91,10 +93,15 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
               .filter((b) => b.active === true && b.url && b.url.trim() !== "")
               .map((b) => b.url);
 
+            const bConf = rawSettings.bannerConfig || DEFAULT_GLOBAL_SETTINGS.bannerConfig!;
+            const cInfo = rawSettings.companyInfo || DEFAULT_GLOBAL_SETTINGS.companyInfo!;
+
             return {
               ...prev,
               companyInfo: {
                 ...prev.companyInfo,
+                companyName: cInfo.companyName || prev.companyInfo.companyName,
+                supportPhone: cInfo.supportPhone || prev.companyInfo.supportPhone,
                 accountHolder: rawSettings.titular,
                 nequiNumber: rawSettings.canalesPago.nequi,
               },
@@ -105,9 +112,13 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
               },
               homeAdBanner: {
                 ...prev.homeAdBanner,
-                enabled: activeBannerUrls.length > 0,
+                enabled: Boolean(bConf.enabled) && activeBannerUrls.length > 0,
                 imageUrl: activeBannerUrls[0] || "",
                 imageUrls: activeBannerUrls,
+                titulo: bConf.titulo || prev.homeAdBanner.titulo,
+                descripcion: bConf.descripcion || prev.homeAdBanner.descripcion,
+                botonTexto: bConf.botonTexto || prev.homeAdBanner.botonTexto,
+                whatsappMensaje: bConf.whatsappMensaje || prev.homeAdBanner.whatsappMensaje,
               },
             };
           });
@@ -145,10 +156,15 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
       .filter((b) => b.active === true && b.url && b.url.trim() !== "")
       .map((b) => b.url);
 
+    const bConf = newSettings.bannerConfig || DEFAULT_GLOBAL_SETTINGS.bannerConfig!;
+    const cInfo = newSettings.companyInfo || DEFAULT_GLOBAL_SETTINGS.companyInfo!;
+
     setConfig((prev) => ({
       ...prev,
       companyInfo: {
         ...prev.companyInfo,
+        companyName: cInfo.companyName || prev.companyInfo.companyName,
+        supportPhone: cInfo.supportPhone || prev.companyInfo.supportPhone,
         accountHolder: newSettings.titular,
         nequiNumber: newSettings.canalesPago.nequi,
       },
@@ -159,9 +175,13 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
       },
       homeAdBanner: {
         ...prev.homeAdBanner,
-        enabled: activeBannerUrls.length > 0,
+        enabled: Boolean(bConf.enabled) && activeBannerUrls.length > 0,
         imageUrl: activeBannerUrls[0] || "",
         imageUrls: activeBannerUrls,
+        titulo: bConf.titulo || prev.homeAdBanner.titulo,
+        descripcion: bConf.descripcion || prev.homeAdBanner.descripcion,
+        botonTexto: bConf.botonTexto || prev.homeAdBanner.botonTexto,
+        whatsappMensaje: bConf.whatsappMensaje || prev.homeAdBanner.whatsappMensaje,
       },
     }));
 

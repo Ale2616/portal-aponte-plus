@@ -1,46 +1,50 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
+import fs from "fs";
+import path from "path";
 import { redis, redisGet, redisSet } from "@/lib/redis";
+import {
+  GlobalSettings,
+  DEFAULT_GLOBAL_SETTINGS,
+  BannerConfig,
+} from "@/types/config";
 
 // ─── BLINDAJE CONTRA CACHÉ DE VERCEL / NEXT.JS (OBLIGATORIO) ─────────────────
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const fetchCache = "force-no-store";
 
-export interface GlobalSettings {
-  titular: string; // ej. "Andrés Aponte / Aponte Plus"
-  canalesPago: {
-    nequi: string;
-    bancolombia: string;
-    breB: string;
-  };
-  banners: Array<{
-    id: string;
-    url: string;
-    active: boolean;
-  }>;
-  avisoGlobal: {
-    activo: boolean;
-    texto: string;
-  };
-}
-
-export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
-  titular: "Andrés Aponte / Aponte Plus",
-  canalesPago: {
-    nequi: "311 276 0959",
-    bancolombia: "84758122483",
-    breB: "311 276 0959",
-  },
-  banners: [],
-  avisoGlobal: {
-    activo: false,
-    texto: "Aviso de mantenimiento programado.",
-  },
-};
+export type { GlobalSettings };
+export { DEFAULT_GLOBAL_SETTINGS };
 
 const REDIS_KEY = "isp:global_settings";
+const LOCAL_SETTINGS_FILE = path.join(process.cwd(), "src", "data", "global-settings.json");
+
 let devLocalFallback: GlobalSettings | null = null;
+
+function readLocalSettingsFile(): GlobalSettings | null {
+  try {
+    if (fs.existsSync(LOCAL_SETTINGS_FILE)) {
+      const data = fs.readFileSync(LOCAL_SETTINGS_FILE, "utf-8");
+      return JSON.parse(data) as GlobalSettings;
+    }
+  } catch (err) {
+    console.warn("[API /api/config] Error al leer archivo local de settings:", err);
+  }
+  return null;
+}
+
+function writeLocalSettingsFile(settings: GlobalSettings): void {
+  try {
+    const dir = path.dirname(LOCAL_SETTINGS_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(LOCAL_SETTINGS_FILE, JSON.stringify(settings, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("[API /api/config] Error al escribir archivo local de settings (ignorable en Vercel):", err);
+  }
+}
 
 /**
  * GET /api/config
@@ -48,14 +52,16 @@ let devLocalFallback: GlobalSettings | null = null;
  */
 export async function GET() {
   try {
-    const raw = (await redisGet<GlobalSettings>(REDIS_KEY)) || devLocalFallback;
+    let raw: any = await redisGet<GlobalSettings>(REDIS_KEY);
+    if (!raw) {
+      raw = devLocalFallback || readLocalSettingsFile();
+    }
 
     let settings: GlobalSettings = DEFAULT_GLOBAL_SETTINGS;
     if (raw && typeof raw === "object") {
       const rawBanners = Array.isArray(raw.banners) ? raw.banners : [];
-      // Filtrar de raíz cualquier banner inexistente tipo /banner1.webp o rutas vacías
       const safeBanners = rawBanners.filter(
-        (b) =>
+        (b: any) =>
           b &&
           typeof b.url === "string" &&
           b.url.trim() !== "" &&
@@ -63,6 +69,9 @@ export async function GET() {
           !b.url.includes("banner2.webp") &&
           !b.url.includes("banner3.webp")
       );
+
+      const rawBannerConfig = raw.bannerConfig || raw.settings?.bannerConfig;
+      const rawCompanyInfo = raw.companyInfo || raw.settings?.companyInfo;
 
       settings = {
         titular: (raw.titular || DEFAULT_GLOBAL_SETTINGS.titular).trim(),
@@ -75,6 +84,17 @@ export async function GET() {
         avisoGlobal: {
           activo: Boolean(raw.avisoGlobal?.activo ?? false),
           texto: (raw.avisoGlobal?.texto || DEFAULT_GLOBAL_SETTINGS.avisoGlobal.texto).trim(),
+        },
+        bannerConfig: {
+          enabled: Boolean(rawBannerConfig?.enabled ?? raw.bannerEnabled ?? DEFAULT_GLOBAL_SETTINGS.bannerConfig!.enabled),
+          titulo: (rawBannerConfig?.titulo || raw.bannerTitulo || DEFAULT_GLOBAL_SETTINGS.bannerConfig!.titulo).trim(),
+          descripcion: (rawBannerConfig?.descripcion || raw.bannerDescripcion || DEFAULT_GLOBAL_SETTINGS.bannerConfig!.descripcion).trim(),
+          botonTexto: (rawBannerConfig?.botonTexto || raw.bannerBotonTexto || DEFAULT_GLOBAL_SETTINGS.bannerConfig!.botonTexto).trim(),
+          whatsappMensaje: (rawBannerConfig?.whatsappMensaje || raw.bannerWhatsappMensaje || DEFAULT_GLOBAL_SETTINGS.bannerConfig!.whatsappMensaje).trim(),
+        },
+        companyInfo: {
+          companyName: (rawCompanyInfo?.companyName || raw.companyName || DEFAULT_GLOBAL_SETTINGS.companyInfo!.companyName).trim(),
+          supportPhone: (rawCompanyInfo?.supportPhone || raw.supportPhone || DEFAULT_GLOBAL_SETTINGS.companyInfo!.supportPhone).trim(),
         },
       };
     }
@@ -133,7 +153,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Estructurar el objeto limpio para guardar en Redis
+    const rawBannerConfig = body.bannerConfig || body.settings?.bannerConfig;
+    const rawCompanyInfo = body.companyInfo || body.settings?.companyInfo;
+
+    // Estructurar el objeto limpio para guardar en Redis y en disco local
     const cleanSettings: GlobalSettings = {
       titular: (body.titular || body.settings?.titular || DEFAULT_GLOBAL_SETTINGS.titular).trim(),
       canalesPago: {
@@ -150,11 +173,60 @@ export async function POST(req: NextRequest) {
         activo: Boolean(body.avisoGlobal?.activo ?? body.settings?.avisoGlobal?.activo ?? false),
         texto: (body.avisoGlobal?.texto || body.settings?.avisoGlobal?.texto || DEFAULT_GLOBAL_SETTINGS.avisoGlobal.texto).trim(),
       },
+      bannerConfig: {
+        enabled: Boolean(
+          rawBannerConfig?.enabled ??
+          body.bannerEnabled ??
+          body.settings?.bannerEnabled ??
+          DEFAULT_GLOBAL_SETTINGS.bannerConfig!.enabled
+        ),
+        titulo: (
+          rawBannerConfig?.titulo ||
+          body.bannerTitulo ||
+          body.settings?.bannerTitulo ||
+          DEFAULT_GLOBAL_SETTINGS.bannerConfig!.titulo
+        ).trim(),
+        descripcion: (
+          rawBannerConfig?.descripcion ||
+          body.bannerDescripcion ||
+          body.settings?.bannerDescripcion ||
+          DEFAULT_GLOBAL_SETTINGS.bannerConfig!.descripcion
+        ).trim(),
+        botonTexto: (
+          rawBannerConfig?.botonTexto ||
+          body.bannerBotonTexto ||
+          body.settings?.bannerBotonTexto ||
+          DEFAULT_GLOBAL_SETTINGS.bannerConfig!.botonTexto
+        ).trim(),
+        whatsappMensaje: (
+          rawBannerConfig?.whatsappMensaje ||
+          body.bannerWhatsappMensaje ||
+          body.settings?.bannerWhatsappMensaje ||
+          DEFAULT_GLOBAL_SETTINGS.bannerConfig!.whatsappMensaje
+        ).trim(),
+      },
+      companyInfo: {
+        companyName: (
+          rawCompanyInfo?.companyName ||
+          body.companyName ||
+          body.settings?.companyName ||
+          DEFAULT_GLOBAL_SETTINGS.companyInfo!.companyName
+        ).trim(),
+        supportPhone: (
+          rawCompanyInfo?.supportPhone ||
+          body.supportPhone ||
+          body.settings?.supportPhone ||
+          DEFAULT_GLOBAL_SETTINGS.companyInfo!.supportPhone
+        ).trim(),
+      },
     };
 
-    // Guardar en Redis usando await redis.set("isp:global_settings", JSON.stringify(body))
+    // 1. Guardar en memoria y en disco local para desarrollo
     devLocalFallback = cleanSettings;
-    await redis.set("isp:global_settings", JSON.stringify(body));
+    writeLocalSettingsFile(cleanSettings);
+
+    // 2. Guardar en Redis permanente
+    await redisSet(REDIS_KEY, cleanSettings);
 
     // Invalidar caché de borde en Vercel
     try {
@@ -173,9 +245,7 @@ export async function POST(req: NextRequest) {
       },
       {
         headers: {
-          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
-          "Pragma": "no-cache",
-          "Expires": "0",
+          "Cache-Control": "no-store, no-cache, must-revalidate",
         },
       }
     );
@@ -184,7 +254,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: error.message || "Error al guardar la configuración en el servidor.",
+        error: error.message || "Error al procesar la solicitud.",
       },
       { status: 500 }
     );
