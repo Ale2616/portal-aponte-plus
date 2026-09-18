@@ -39,6 +39,65 @@ export function StatusCard({ client, onOpenPayment, onOpenBankAccounts, onChange
   const isCut = client.estadoServicio === "cortado";
   const hasDebt = client.saldoTotalPendiente > 0;
 
+  const servicioActivo = (client as any)?.servicioActivo || client?.servicio;
+
+  // Extraer y normalizar Barrio
+  let rawBarrio = (
+    servicioActivo?.barrio ||
+    client.barrio ||
+    (client as any)?.barrio_nombre ||
+    (client as any)?.sector ||
+    ""
+  ).trim();
+
+  // Si no tiene barrio o viene como 'Curillo Caqueta', intentar deducirlo de la dirección
+  const fullDireccion = servicioActivo?.direccion || client.direccion || "";
+  if ((!rawBarrio || rawBarrio.toLowerCase().includes("curillo caqueta")) && fullDireccion) {
+    const bMatch = fullDireccion.match(
+      /(?:barrio|b\/|brrio|br\.)\s+([a-záéíóúñ\s]+?)(?=\s+(?:llegando|frente|enfrente|cerca|enseguida|diagonal|casa|calle|cra|carrera|manzana|mz|donde|,|-|\.|$))/i
+    );
+    if (bMatch && bMatch[1]) {
+      rawBarrio = bMatch[1].trim();
+    }
+  }
+
+  let formattedBarrio = "";
+  if (rawBarrio && !rawBarrio.toLowerCase().includes("curillo caqueta")) {
+    const capitalized = rawBarrio
+      .split(" ")
+      .map((w: string) => (w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : ""))
+      .join(" ");
+
+    formattedBarrio = capitalized.toLowerCase().startsWith("barrio ")
+      ? capitalized
+      : `Barrio ${capitalized}`;
+  }
+
+  // Extraer y normalizar Ciudad (nunca mostrar 'Colombia' como ciudad)
+  const rawCiudad = (
+    servicioActivo?.ciudad ||
+    servicioActivo?.municipio ||
+    client.ciudad ||
+    (client as any)?.municipio ||
+    "Curillo"
+  ).trim();
+  const formattedCiudad = (!rawCiudad || rawCiudad.toLowerCase() === "colombia") ? "Curillo" : rawCiudad;
+
+  // Extraer y normalizar Departamento
+  const rawDepto = (
+    servicioActivo?.departamento ||
+    servicioActivo?.estado_provincia ||
+    (client as any)?.departamento ||
+    "Caquetá"
+  ).trim();
+  const formattedDepto = (!rawDepto || rawDepto.toLowerCase() === "colombia") ? "Caquetá" : rawDepto;
+
+  const ubicacionGeografica = [
+    formattedBarrio,
+    formattedCiudad,
+    formattedDepto,
+  ].filter(Boolean).join(" • ");
+
   return (
     <div className="w-full space-y-4">
       {/* Banner de alerta si está cortado */}
@@ -201,11 +260,11 @@ export function StatusCard({ client, onOpenPayment, onOpenBankAccounts, onChange
       {/* Grid de Especificaciones Técnicas y de Infraestructura (Alto Contraste y Nitidez) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
         {/* 1. Plan Contratado */}
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-700/80 shadow-md backdrop-blur-sm flex items-start gap-3.5">
+        <div className="p-4 sm:p-4.5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-700/80 shadow-md backdrop-blur-sm flex items-center justify-start sm:justify-center gap-3.5 sm:gap-4">
           <div className="p-2.5 rounded-xl bg-sky-50 dark:bg-slate-800 text-sky-600 dark:text-sky-400 border border-sky-100 dark:border-slate-700 flex-shrink-0">
             <Wifi className="w-4 h-4" strokeWidth={2} />
           </div>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0">
             <span className="text-[11px] font-bold text-slate-500 dark:text-slate-300 uppercase tracking-wider block">
               Plan Contratado
             </span>
@@ -223,62 +282,41 @@ export function StatusCard({ client, onOpenPayment, onOpenBankAccounts, onChange
                 {client.plan.velocidadSubida}
               </span>
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-300 mt-1">
-              Tarifa Plana: <strong className="font-sans font-bold tracking-tight tabular-nums text-slate-900 dark:text-white">{formatCurrency(client.plan.precioMensual)}</strong>
-            </p>
           </div>
         </div>
 
-        {/* 2. IP e Infraestructura */}
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-700/80 shadow-md backdrop-blur-sm flex items-start gap-3.5">
+        {/* 2. Red e Infraestructura */}
+        <div className="p-4 sm:p-4.5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-700/80 shadow-md backdrop-blur-sm flex items-center justify-start sm:justify-center gap-3.5 sm:gap-4">
           <div className="p-2.5 rounded-xl bg-sky-50 dark:bg-slate-800 text-sky-600 dark:text-sky-400 border border-sky-100 dark:border-slate-700 flex-shrink-0">
             <Server className="w-4 h-4" strokeWidth={2} />
           </div>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0">
             <span className="text-[11px] font-bold text-slate-500 dark:text-slate-300 uppercase tracking-wider block">
               Red e Infraestructura
             </span>
-            <p className="text-sm font-extrabold font-sans tracking-tight tabular-nums text-slate-900 dark:text-white truncate mt-0.5">
-              IP: {safeText(client.servicio.ip, "100.64.0.1")}
+            <p className="text-xs font-semibold text-slate-900 dark:text-white mt-1">
+              Equipo: <span className="font-normal text-slate-600 dark:text-slate-300">{servicioActivo?.modelo_router || servicioActivo?.equipo || client.servicio?.routerOnt || 'Tp-Link AC1200'}</span>
             </p>
-            {client.servicio.mac && (
-              <p className="text-xs font-sans font-semibold tracking-tight tabular-nums text-slate-700 dark:text-slate-200 truncate mt-0.5">
-                MAC: {client.servicio.mac}
-              </p>
-            )}
-            <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 truncate mt-0.5">
-              Equipo: {safeText(client.servicio.routerOnt, "Router ONT")}
+            <p className="text-xs font-semibold text-slate-900 dark:text-white mt-1">
+              MAC: <span className="font-mono font-normal text-slate-600 dark:text-slate-300">{servicioActivo?.mac || client.servicio?.mac || 'No registrada'}</span>
             </p>
-            {client.servicio.mikrotik && (
-              <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                Router: {client.servicio.mikrotik}
-              </p>
-            )}
           </div>
         </div>
 
-        {/* 3. Nodo y Ubicación */}
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-700/80 shadow-md backdrop-blur-sm flex items-start gap-3.5">
+        {/* 3. Ubicación del Servicio */}
+        <div className="p-4 sm:p-4.5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-700/80 shadow-md backdrop-blur-sm flex items-center justify-start sm:justify-center gap-3.5 sm:gap-4">
           <div className="p-2.5 rounded-xl bg-sky-50 dark:bg-slate-800 text-sky-600 dark:text-sky-400 border border-sky-100 dark:border-slate-700 flex-shrink-0">
             <Building className="w-4 h-4" strokeWidth={2} />
           </div>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 max-w-full">
             <span className="text-[11px] font-bold text-slate-500 dark:text-slate-300 uppercase tracking-wider block">
-              Nodo y Ubicación
+              Ubicación del Servicio
             </span>
-            <p className="text-sm font-extrabold text-slate-900 dark:text-white truncate mt-0.5">
-              {safeText(client.servicio.nodo, "Nodo Principal Fibra")}
+            <p className="text-xs font-bold text-slate-900 dark:text-white mt-1">
+              {ubicacionGeografica || 'Curillo, Caquetá'}
             </p>
-            {(client.servicio.sectorial || client.servicio.cajaNap) && (
-              <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate mt-0.5">
-                {client.servicio.cajaNap ? `Caja NAP: ${client.servicio.cajaNap}` : `Sector: ${client.servicio.sectorial}`}
-              </p>
-            )}
-            <p className="text-xs text-slate-600 dark:text-slate-300 truncate mt-0.5">
-              {safeText(client.direccion)}
-            </p>
-            <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate mt-0.5">
-              {client.barrio ? `${client.barrio}, ` : ""}{safeText(client.ciudad)}
+            <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 break-words whitespace-normal leading-relaxed">
+              {servicioActivo?.direccion || client.direccion || 'Dirección registrada en contrato'}
             </p>
           </div>
         </div>

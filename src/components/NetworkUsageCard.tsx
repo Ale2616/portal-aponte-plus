@@ -16,6 +16,8 @@ import {
   RefreshCw,
   AlertTriangle,
   Loader2,
+  Gauge,
+  Zap,
 } from "lucide-react";
 
 interface NetworkUsageCardProps {
@@ -27,14 +29,112 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [liveConsumo, setLiveConsumo] = useState<NetworkUsageData | null>(null);
+  const [mikrotikLive, setMikrotikLive] = useState<any>(null);
+  const [isMikrotikPolling, setIsMikrotikPolling] = useState(false);
+
+
+  // 1. Extraer la fecha real de activación en el orden solicitado:
+  const servicioActivo = (client as any)?.servicioActivo || client?.servicio;
+  const clienteActivo = (client as any)?.clienteActivo || client;
+
+  // Extraer posibles facturas o facturas históricas para respaldo si no hay fecha explícita
+  const facturas = (client as any)?.invoices || (client as any)?.facturas || [];
+  let oldestInvoiceDate: string | null = null;
+  if (Array.isArray(facturas) && facturas.length > 0) {
+    const dates = facturas
+      .map((i: any) => i.fechaEmision || i.fecha || i.fechaVencimiento)
+      .filter(Boolean)
+      .sort();
+    if (dates.length > 0) {
+      oldestInvoiceDate = dates[0];
+    }
+  }
+
+  const fechaReal =
+    servicioActivo?.fecha_instalacion ||
+    servicioActivo?.fecha_alta ||
+    servicioActivo?.fecha_ingreso ||
+    servicioActivo?.fecha_activacion ||
+    clienteActivo?.fecha_instalacion ||
+    clienteActivo?.fecha_alta ||
+    clienteActivo?.fecha_ingreso ||
+    clienteActivo?.fecha_activacion ||
+    client?.fecha_instalacion ||
+    client?.fecha_alta ||
+    client?.fecha_ingreso ||
+    client?.fechaInstalacion ||
+    client?.fechaRegistro ||
+    servicioActivo?.created_at ||
+    clienteActivo?.created_at ||
+    client?.created_at ||
+    oldestInvoiceDate;
+
+  const formatearFecha = (f?: string | null): string | null => {
+    if (!f) return null;
+    const str = String(f).trim();
+    if (
+      !str ||
+      str.toLowerCase().includes("validaci") ||
+      str.toLowerCase().includes("null") ||
+      str.toLowerCase().includes("undefined")
+    ) {
+      return null;
+    }
+
+    const meses = [
+      "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+      "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+    ];
+
+    // 1. Formato DD/MM/YYYY o DD-MM-YYYY (con o sin hora, ej: "09/11/2021 12:03:00")
+    const dmyMatch = str.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
+    if (dmyMatch) {
+      const d = parseInt(dmyMatch[1], 10);
+      const m = parseInt(dmyMatch[2], 10);
+      const y = parseInt(dmyMatch[3], 10);
+      if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+        return `${d} de ${meses[m - 1]}, ${y}`;
+      }
+    }
+
+    // 2. Formato YYYY-MM-DD o YYYY/MM/DD (con o sin hora o T, ej: "2021-11-09")
+    const ymdMatch = str.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})/);
+    if (ymdMatch) {
+      const y = parseInt(ymdMatch[1], 10);
+      const m = parseInt(ymdMatch[2], 10);
+      const d = parseInt(ymdMatch[3], 10);
+      if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+        return `${d} de ${meses[m - 1]}, ${y}`;
+      }
+    }
+
+    // 3. Fallback general a Date evitando desfase horario UTC
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) {
+      const y = parsed.getUTCFullYear();
+      const m = parsed.getUTCMonth();
+      const d = parsed.getUTCDate();
+      return `${d} de ${meses[m]}, ${y}`;
+    }
+
+    return null;
+  };
+
+  const fechaFormateada =
+    formatearFecha(fechaReal) ||
+    formatearFecha(liveConsumo?.fechaInstalacion) ||
+    formatearFecha(client.consumoRed?.fechaInstalacion) ||
+    formatearFecha(oldestInvoiceDate);
+
+  const etiquetaActivacion = `🗓️ Activación: ${fechaFormateada || 'Fecha en validación'}`;
 
   // Consumo real calculado desde WispHub sin ningún dato simulado ni aleatorio
   const consumo: NetworkUsageData = liveConsumo || client.consumoRed || {
     totalGb: 0,
     totalDownloadGb: 0,
     totalUploadGb: 0,
-    fechaInstalacion: client.fechaInstalacion || null,
-    fechaInstalacionLabel: client.fechaInstalacion || "Fecha no registrada",
+    fechaInstalacion: fechaReal || client.fechaInstalacion || null,
+    fechaInstalacionLabel: fechaFormateada ? `${fechaFormateada}` : "Fecha en validación",
     diasActivo: 1,
     esServicioNuevo: true,
     mensajeEstado: "Servicio nuevo: recopilando historial de navegación",
@@ -72,6 +172,87 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
     fetchTraffic();
   }, [client.id]);
 
+  // Extraer IP de la línea para consultar MikroTik RouterOS
+  const rawIp = servicioActivo?.ip || (client as any)?.ip || client?.servicio?.ip || "";
+  const clientIp = typeof rawIp === "string" ? rawIp.trim().replace(/^["']|["']$/g, "") : "";
+  const hasValidIp = Boolean(
+    clientIp &&
+    clientIp !== "0.0.0.0" &&
+    !clientIp.toLowerCase().includes("no asignada") &&
+    !clientIp.toLowerCase().includes("null") &&
+    !clientIp.toLowerCase().includes("undefined")
+  );
+
+  // Polling moderado a la API interna de MikroTik cada 8 segundos con detector de visibilidad
+  useEffect(() => {
+    if (!hasValidIp) return;
+
+    let isMounted = true;
+    let timerId: NodeJS.Timeout | null = null;
+
+    const fetchMikrotikLive = async () => {
+      // Pausar si la pestaña no está activa para evitar saturar el MikroTik
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        return;
+      }
+
+      try {
+        setIsMikrotikPolling(true);
+        const res = await fetch(`/api/servicio/trafico?ip=${encodeURIComponent(clientIp)}`, {
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (isMounted && data.success) {
+          setMikrotikLive(data);
+        }
+      } catch {
+        // Manejo silencioso defensivo
+      } finally {
+        if (isMounted) {
+          setIsMikrotikPolling(false);
+        }
+      }
+    };
+
+    fetchMikrotikLive();
+
+    timerId = setInterval(() => {
+      fetchMikrotikLive();
+    }, 8000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        fetchMikrotikLive();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      isMounted = false;
+      if (timerId) clearInterval(timerId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [clientIp, hasValidIp]);
+
+  // Cálculo del porcentaje de velocidad contratada para tacómetro
+  const planSpeedMatch = String(client.plan?.velocidadBajada || "").match(/\d+/);
+  const planMaxMbps = planSpeedMatch ? parseInt(planSpeedMatch[0], 10) : 50;
+  const rxMbps = mikrotikLive?.velocidad?.descargaMbps || 0;
+  const txMbps = mikrotikLive?.velocidad?.subidaMbps || 0;
+  const rxPercent = Math.min(100, Math.max(0, Math.round((rxMbps / planMaxMbps) * 100)));
+  const txPercent = Math.min(100, Math.max(0, Math.round((txMbps / planMaxMbps) * 100)));
+
+  const liveSesionDescarga =
+    mikrotikLive?.sesionEnVivo?.descarga ||
+    consumo.sesionEnVivo?.descarga ||
+    `${(consumo.consumoHoy?.downloadGb ?? 0).toFixed(1)} GB`;
+
+  const liveSesionSubida =
+    mikrotikLive?.sesionEnVivo?.subida ||
+    consumo.sesionEnVivo?.subida ||
+    `${(consumo.consumoHoy?.uploadGb ?? 0).toFixed(1)} GB`;
+
   const dias = consumo.dias || [];
   const maxDayGb = Math.max(1, ...dias.map((d) => d.totalGb));
 
@@ -88,10 +269,6 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
               <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
                 Mi Consumo de Internet
               </h3>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Fibra Activa
-              </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Monitoreo de tráfico real sincronizado con la red central
@@ -100,8 +277,7 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
         </div>
 
         <div className="flex items-center gap-2 text-xs font-sans font-semibold tracking-tight tabular-nums text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 px-3 py-1.5 rounded-xl border border-slate-200/60 dark:border-slate-700/60 self-start sm:self-auto">
-          <Calendar className="w-3.5 h-3.5 text-slate-400" />
-          <span>Activación: {consumo.fechaInstalacionLabel}</span>
+          <span>{etiquetaActivacion}</span>
         </div>
       </div>
 
@@ -204,7 +380,13 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
             {client.plan.velocidadBajada}
           </p>
           <span className="text-[10px] sm:text-[11px] text-emerald-600 dark:text-emerald-400 font-medium block truncate">
-            100% Simétrica Dedicada
+            {rxMbps > 0 ? (
+              <span className="text-sky-600 dark:text-sky-400 font-semibold font-sans tabular-nums">
+                En vivo: ↓ {mikrotikLive?.velocidad?.descargaFormateada}
+              </span>
+            ) : (
+              "100% Simétrica Dedicada"
+            )}
           </span>
         </div>
 
@@ -214,15 +396,20 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
             <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 truncate block">
               Sesión en Vivo
             </span>
-            <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500 flex-shrink-0" strokeWidth={1.75} />
+            <div className="flex items-center gap-1.5">
+              {isMikrotikPolling && (
+                <RefreshCw className="w-3 h-3 text-sky-500 animate-spin flex-shrink-0" />
+              )}
+              <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500 flex-shrink-0" strokeWidth={1.75} />
+            </div>
           </div>
           <p className="text-base sm:text-lg lg:text-xl font-bold font-sans tracking-tight tabular-nums text-slate-900 dark:text-slate-100 truncate">
             <span className="text-sky-600 dark:text-sky-400">
-              ↓ {consumo.sesionEnVivo?.descarga || `${(consumo.consumoHoy?.downloadGb ?? 0).toFixed(1)} GB`}
+              ↓ {liveSesionDescarga}
             </span>
           </p>
           <span className="text-[10px] sm:text-[11px] text-emerald-600 dark:text-emerald-400 font-medium block truncate font-sans tracking-tight tabular-nums">
-            ↑ {consumo.sesionEnVivo?.subida || `${(consumo.consumoHoy?.uploadGb ?? 0).toFixed(1)} GB`} • En Línea
+            ↑ {liveSesionSubida} • En Línea
           </span>
         </div>
       </div>
@@ -237,9 +424,94 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
         </div>
         <div className="flex items-center gap-2 font-sans font-semibold tracking-tight tabular-nums text-[11px] text-slate-500 dark:text-slate-400 self-start sm:self-auto">
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-          <span>IP: {client.servicio.ip}</span>
+          <span className="text-slate-700 dark:text-slate-200 font-medium">Conexión Cifrada • En Línea</span>
           <span>•</span>
           <span className="text-emerald-600 dark:text-emerald-400 font-bold">Datos en Tiempo Real</span>
+        </div>
+      </div>
+
+      {/* Tacómetro / Monitor de Tráfico y Velocidad en Vivo MikroTik */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100/60 dark:from-slate-800/50 dark:to-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
+              <Gauge className="w-4 h-4" strokeWidth={2} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
+                  Velocidad en Vivo
+                </h4>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                Métricas instantáneas de navegación en tiempo real
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-start sm:self-auto text-[11px] font-sans font-semibold tracking-tight text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900/90 px-3 py-1.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+            <Zap className={`w-3.5 h-3.5 ${rxMbps > 0 || txMbps > 0 ? "text-amber-500 animate-bounce" : "text-slate-400"}`} />
+            <span>{isMikrotikPolling ? "Midiendo..." : rxMbps > 0 || txMbps > 0 ? "Tráfico Activo" : "Línea en Reposo"}</span>
+          </div>
+        </div>
+
+        {/* Tacómetro Digital Dual: Bajada (Rx) y Subida (Tx) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+          {/* Bajada / Download */}
+          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900/90 border border-slate-200/70 dark:border-slate-700/60 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400 flex items-center gap-1.5">
+                <ArrowDownCircle className="w-3.5 h-3.5" />
+                Descarga Actual (Rx)
+              </span>
+              <span className="text-[10px] font-sans font-semibold text-slate-400">
+                Plan: {client.plan.velocidadBajada}
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="text-xl sm:text-2xl font-bold font-sans tracking-tight tabular-nums text-slate-900 dark:text-slate-100">
+                {mikrotikLive?.velocidad?.descargaFormateada || "0.0 Mbps"}
+              </p>
+              <span className="text-[10px] font-bold font-sans tabular-nums text-sky-600 dark:text-sky-400">
+                {rxPercent}% uso contratado
+              </span>
+            </div>
+            {/* Barra de progreso de tacómetro */}
+            <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-sky-500 to-blue-600 transition-all duration-500 rounded-full"
+                style={{ width: `${Math.max(2, rxPercent)}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Subida / Upload */}
+          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900/90 border border-slate-200/70 dark:border-slate-700/60 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                <ArrowUpCircle className="w-3.5 h-3.5" />
+                Subida Actual (Tx)
+              </span>
+              <span className="text-[10px] font-sans font-semibold text-slate-400">
+                Plan: {client.plan.velocidadSubida || client.plan.velocidadBajada}
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="text-xl sm:text-2xl font-bold font-sans tracking-tight tabular-nums text-slate-900 dark:text-slate-100">
+                {mikrotikLive?.velocidad?.subidaFormateada || "0.0 Mbps"}
+              </p>
+              <span className="text-[10px] font-bold font-sans tabular-nums text-emerald-600 dark:text-emerald-400">
+                {txPercent}% uso contratado
+              </span>
+            </div>
+            {/* Barra de progreso de tacómetro */}
+            <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-500 rounded-full"
+                style={{ width: `${Math.max(2, txPercent)}%` }}
+              />
+            </div>
+          </div>
         </div>
       </div>
 

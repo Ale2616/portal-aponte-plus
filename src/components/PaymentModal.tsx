@@ -11,6 +11,7 @@ import { branding } from "@/config/branding";
 import { useConfig } from "@/context/ConfigContext";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import { FileUpload } from "./FileUpload";
+import { PushNotificationCard } from "./PushNotificationCard";
 import {
   X,
   Loader2,
@@ -330,7 +331,7 @@ export function PaymentModal({
         duration: 8000,
       });
       onSuccessReport(json);
-      handleModalClose();
+      setSuccessData(json);
     } catch (err: any) {
       console.error(err);
       toast.error("Error al reportar pago", {
@@ -442,6 +443,14 @@ export function PaymentModal({
                     {formatDateTime(successData.fechaRecepcion)}
                   </span>
                 </div>
+              </div>
+
+              {/* Tarjeta de Activación de Notificaciones Push Web */}
+              <div className="max-w-md mx-auto my-2 text-left">
+                <PushNotificationCard
+                  cedula={client.cedula}
+                  idServicio={client.servicio?.idServicio?.toString()}
+                />
               </div>
 
               <div className="pt-2 flex justify-center">

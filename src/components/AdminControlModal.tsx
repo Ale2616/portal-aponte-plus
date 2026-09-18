@@ -25,6 +25,8 @@ import {
   Image as ImageIcon,
   Eye,
   Star,
+  BellRing,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -45,7 +47,15 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
     resetToDefaults,
   } = useConfig();
 
-  const [activeTab, setActiveTab] = useState<"banner" | "promos" | "comercial" | "alerta">("banner");
+  const [activeTab, setActiveTab] = useState<"banner" | "promos" | "comercial" | "alerta" | "pagos">("banner");
+
+  // Estados locales para Aprobación de Pagos y Notificaciones Push
+  const [pagoCedula, setPagoCedula] = useState("");
+  const [pagoNombre, setPagoNombre] = useState("");
+  const [pagoMonto, setPagoMonto] = useState("");
+  const [pagoServicio, setPagoServicio] = useState("Fibra Óptica FTTH");
+  const [isSendingPaymentPush, setIsSendingPaymentPush] = useState(false);
+
 
   // ─── Estados locales para Configuración Global (isp:global_settings) ───────
   const [titular, setTitular] = useState(globalSettings.titular || DEFAULT_GLOBAL_SETTINGS.titular);
@@ -407,6 +417,56 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
   };
 
   // Bloqueo estricto del scroll del fondo (body scroll-lock)
+  const handleApprovePaymentAndNotify = async () => {
+    if (!pagoCedula.trim()) {
+      toast.error("Ingresa la cédula del abonado");
+      return;
+    }
+
+    setIsSendingPaymentPush(true);
+    const toastId = toast.loading("Validando pago y enviando notificación push...");
+
+    try {
+      const res = await fetch("/api/admin/aprobar-pago", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cedula: pagoCedula.trim(),
+          nombre: pagoNombre.trim() || undefined,
+          monto: pagoMonto ? Number(pagoMonto.replace(/\D/g, "")) : undefined,
+          servicio: pagoServicio.trim(),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "No se pudo procesar la aprobación");
+      }
+
+      if (data.pushNotified) {
+        toast.success("¡Pago Aprobado y Push Enviado!", {
+          id: toastId,
+          description: `El cliente con cédula ${pagoCedula} recibió la confirmación en su dispositivo.`,
+          duration: 6000,
+        });
+      } else {
+        toast.info("Pago Aprobado", {
+          id: toastId,
+          description: data.message || "El cliente aún no tiene un dispositivo suscrito a push.",
+          duration: 6000,
+        });
+      }
+    } catch (err: any) {
+      toast.error("Error al procesar", {
+        id: toastId,
+        description: err.message || "Verifica la conexión",
+      });
+    } finally {
+      setIsSendingPaymentPush(false);
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       const originalOverflow = document.body.style.overflow;
@@ -519,6 +579,18 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
             {alertEnabled && (
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
             )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab("pagos")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === "pagos"
+                ? "bg-gradient-to-r from-emerald-500/20 to-teal-500/15 border border-emerald-500/40 text-emerald-300 font-bold shadow-sm shadow-emerald-950/30"
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent"
+            }`}
+          >
+            <BellRing className="w-4 h-4" />
+            <span>Validar Pagos & Push</span>
           </button>
         </div>
 
@@ -1364,6 +1436,109 @@ export function AdminControlModal({ isOpen, onClose }: AdminControlModalProps) {
             </div>
           )}
 
+          {/* ======================================================== */}
+          {/* TAB 5: VALIDAR PAGOS & DISPARAR NOTIFICACIÓN PUSH WEB */}
+          {/* ======================================================== */}
+          {activeTab === "pagos" && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              <div className="p-4 rounded-2xl bg-slate-800/50 border border-slate-700/60 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="font-bold text-white text-base flex items-center gap-2">
+                    <BellRing className="w-4 h-4 text-emerald-400" />
+                    Validación de Pagos & Disparo de Notificaciones Push
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Al confirmar el pago de un abonado, el sistema enviará inmediatamente una alerta Web Push a su teléfono o computador
+                  </p>
+                </div>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 shrink-0 self-start sm:self-auto">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  Web Push API Activo
+                </span>
+              </div>
+
+              <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+                      Cédula / Documento del Abonado <span className="text-rose-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={pagoCedula}
+                      onChange={(e) => setPagoCedula(e.target.value)}
+                      placeholder="Ej: 1117548920"
+                      className="w-full px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+                      Nombre del Titular (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={pagoNombre}
+                      onChange={(e) => setPagoNombre(e.target.value)}
+                      placeholder="Ej: Orlinda Pérez"
+                      className="w-full px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+                      Monto Aprobado (COP)
+                    </label>
+                    <input
+                      type="text"
+                      value={pagoMonto}
+                      onChange={(e) => setPagoMonto(e.target.value)}
+                      placeholder="Ej: 50.000"
+                      className="w-full px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+                      Servicio / Plan
+                    </label>
+                    <input
+                      type="text"
+                      value={pagoServicio}
+                      onChange={(e) => setPagoServicio(e.target.value)}
+                      placeholder="Ej: Fibra Óptica 50 Megas"
+                      className="w-full px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <p className="text-[11px] text-slate-400">
+                    💡 La notificación push llegará al dispositivo registrado del cliente aunque tenga la página cerrada.
+                  </p>
+
+                  <button
+                    type="button"
+                    disabled={isSendingPaymentPush || !pagoCedula.trim()}
+                    onClick={handleApprovePaymentAndNotify}
+                    className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white transition-all cursor-pointer shadow-md shadow-emerald-950/40 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                  >
+                    {isSendingPaymentPush ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Enviando Push...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4" />
+                        <span>Aprobar Pago y Notificar al Cliente</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ─── FOOTER STICKY ─────────────────────────────────────────────────── */}

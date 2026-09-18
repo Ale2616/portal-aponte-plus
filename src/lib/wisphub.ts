@@ -269,6 +269,73 @@ export const limpiarTexto = (texto: any): string => {
     .trim();
 };
 
+/**
+ * Recupera el registro local de clientes.json como respaldo para obtener el barrio original del abonado
+ */
+export function getLocalClientFallback(cedula: string): any {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const data = require("../data/clientes.json");
+    const clean = String(cedula || "").trim();
+    if (data?.clientes?.[clean]) {
+      return data.clientes[clean];
+    }
+    const num = clean.replace(/^0+/, "");
+    if (num && data?.clientes?.[num]) {
+      return data.clientes[num];
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Normaliza y extrae el nombre del barrio limpiando y utilizando fallbacks
+ */
+export function resolveBarrioHelper(rawBarrioCandidate: any, rawDirCandidate: any, cedulaToSearch: string): string {
+  let b = limpiarTexto(rawBarrioCandidate);
+  if (!b && cedulaToSearch) {
+    const local = getLocalClientFallback(cedulaToSearch);
+    if (local?.barrio) {
+      b = limpiarTexto(local.barrio);
+    }
+  }
+  if ((!b || b.toLowerCase().includes("curillo caqueta")) && rawDirCandidate) {
+    const dirStr = String(rawDirCandidate);
+    const m = dirStr.match(
+      /(?:barrio|b\/|brrio|br\.)\s+([a-záéíóúñ\s]+?)(?=\s+(?:llegando|frente|enfrente|cerca|enseguida|diagonal|casa|calle|cra|carrera|manzana|mz|donde|,|-|\.|$))/i
+    );
+    if (m && m[1]) {
+      b = m[1].trim();
+    }
+  }
+  return b;
+}
+
+/**
+ * Normaliza y valida la ciudad del servicio evitando que devuelva 'Colombia'
+ */
+export function resolveCiudadHelper(rawCiudadCandidate: any): string {
+  const c = limpiarTexto(rawCiudadCandidate);
+  if (!c || c.toLowerCase() === "colombia") {
+    return "Curillo";
+  }
+  return c;
+}
+
+/**
+ * Normaliza y valida el departamento del servicio
+ */
+export function resolveDepartamentoHelper(rawDeptoCandidate: any): string {
+  const d = limpiarTexto(rawDeptoCandidate);
+  const invalid = ["colombia", "activo", "cortado", "suspendido", "cancelado", "desactivado", "1", "2", "3"];
+  if (!d || invalid.includes(d.toLowerCase())) {
+    return "Caquetá";
+  }
+  return d;
+}
+
 export interface WisphubServiceSummary {
   idServicio: string;
   id_servicio?: string;
@@ -278,6 +345,13 @@ export interface WisphubServiceSummary {
   nombre?: string;
   nombre_completo?: string;
   direccion: string;
+  barrio?: string;
+  ciudad?: string;
+  municipio?: string;
+  departamento?: string;
+  modelo_router?: string;
+  equipo?: string;
+  mac?: string;
   alias?: string;
   planNombre: string;
   plan_internet?: string;
@@ -285,6 +359,11 @@ export interface WisphubServiceSummary {
   estado: string;
   ip?: string;
   nodo?: string;
+  fecha_instalacion?: string;
+  fecha_alta?: string;
+  fecha_activacion?: string;
+  fecha_ingreso?: string;
+  created_at?: string;
 }
 
 /**
@@ -335,6 +414,20 @@ export async function searchWisphubServicesByDocument(cedula: string): Promise<W
           ? "Suspendido"
           : "Activo";
 
+        const barrio = resolveBarrioHelper(
+          s.barrio || s.sector || s.colonia || s.localidad || item.barrio || item.sector || (item as any)["Barrio/Localidad"],
+          dir,
+          cleanDoc
+        );
+        const ciudad = resolveCiudadHelper(s.ciudad || item.ciudad || s.municipio || item.municipio);
+        const depto = resolveDepartamentoHelper(s.departamento || item.departamento || s.estado || item.estado);
+        const routerModelo = limpiarTexto(
+          extractSafeString(s.modelo_router || s.modelo_router_wifi || s.router || item.modelo_router || item.router || "Tp-Link AC1200")
+        );
+        const macAddr = limpiarTexto(
+          extractSafeString(s.mac || s.mac_router_wifi || s.mac_cpe || s.mac_address || item.mac || "")
+        );
+
         summaries.push({
           idServicio: sId,
           id_servicio: sId,
@@ -345,12 +438,24 @@ export async function searchWisphubServicesByDocument(cedula: string): Promise<W
           nombre_completo: titular,
           direccion: dir.replace(/\r\n|\r|\n/g, " - ").replace(/\s{2,}/g, " ").trim(),
           alias: alias.replace(/\r\n|\r|\n/g, " - ").replace(/\s{2,}/g, " ").trim(),
+          barrio,
+          ciudad,
+          municipio: ciudad,
+          departamento: depto,
+          modelo_router: routerModelo,
+          equipo: routerModelo,
+          mac: macAddr,
           planNombre: plan,
           plan_internet: plan,
           plan,
           estado,
           ip: s.ip || item.ip,
           nodo: limpiarTexto(extractSafeString(s.nodo || item.nodo)),
+          fecha_instalacion: (s as any).fecha_instalacion || (s as any).fecha_alta || (s as any).fecha_activacion || (s as any).fecha_ingreso || (s as any).created_at || (item as any).fecha_instalacion || (item as any).fecha_alta,
+          fecha_alta: (s as any).fecha_alta || (item as any).fecha_alta,
+          fecha_activacion: (s as any).fecha_activacion || (item as any).fecha_activacion,
+          fecha_ingreso: (s as any).fecha_ingreso || (item as any).fecha_ingreso,
+          created_at: (s as any).created_at || (item as any).created_at,
         });
       }
     } else {
@@ -381,6 +486,20 @@ export async function searchWisphubServicesByDocument(cedula: string): Promise<W
         ? "Suspendido"
         : "Activo";
 
+      const barrio = resolveBarrioHelper(
+        item.barrio || item.sector || item.colonia || item.localidad || (item as any)["Barrio/Localidad"],
+        dir,
+        cleanDoc
+      );
+      const ciudad = resolveCiudadHelper(item.ciudad || item.municipio);
+      const depto = resolveDepartamentoHelper(item.departamento || item.estado);
+      const routerModelo = limpiarTexto(
+        extractSafeString(item.modelo_router || item.modelo_router_wifi || item.router || "Tp-Link AC1200")
+      );
+      const macAddr = limpiarTexto(
+        extractSafeString(item.mac || item.mac_router_wifi || item.mac_cpe || item.mac_address || "")
+      );
+
       summaries.push({
         idServicio: sId,
         id_servicio: sId,
@@ -391,12 +510,24 @@ export async function searchWisphubServicesByDocument(cedula: string): Promise<W
         nombre_completo: titular,
         direccion: dir.replace(/\r\n|\r|\n/g, " - ").replace(/\s{2,}/g, " ").trim(),
         alias: alias.replace(/\r\n|\r|\n/g, " - ").replace(/\s{2,}/g, " ").trim(),
+        barrio,
+        ciudad,
+        municipio: ciudad,
+        departamento: depto,
+        modelo_router: routerModelo,
+        equipo: routerModelo,
+        mac: macAddr,
         planNombre: plan,
         plan_internet: plan,
         plan,
         estado,
         ip: item.ip,
         nodo: limpiarTexto(extractSafeString(item.nodo)),
+        fecha_instalacion: (item as any).fecha_instalacion || (item as any).fecha_alta || (item as any).fecha_activacion || (item as any).fecha_ingreso || (item as any).created_at,
+        fecha_alta: (item as any).fecha_alta,
+        fecha_activacion: (item as any).fecha_activacion,
+        fecha_ingreso: (item as any).fecha_ingreso,
+        created_at: (item as any).created_at,
       });
     }
   }
@@ -943,32 +1074,43 @@ export async function fetchWisphubServiceTraffic(serviceId: string | number): Pr
  */
 export function calculateServiceUsage(raw: any): NetworkUsageData {
   const rawFechaInst = extractSafeString(
-    raw.fecha_instalacion || raw.fecha_creacion || raw.fecha_ingreso || raw.fecha_registro || ""
+    raw.fecha_instalacion ||
+    raw.fecha_alta ||
+    raw.fecha_activacion ||
+    raw.fecha_ingreso ||
+    raw.created_at ||
+    raw.fecha_creacion ||
+    raw.fecha_registro ||
+    ""
   );
-  const parsedInstall = parseWisphubDateTime(rawFechaInst) || new Date();
+  const parsedInstall = parseWisphubDateTime(rawFechaInst);
 
   // Fecha actual fija del sistema
   const now = new Date();
-  const installDayMidnight = new Date(
-    parsedInstall.getFullYear(),
-    parsedInstall.getMonth(),
-    parsedInstall.getDate()
-  ).getTime();
+  const installDayMidnight = parsedInstall
+    ? new Date(
+        parsedInstall.getFullYear(),
+        parsedInstall.getMonth(),
+        parsedInstall.getDate()
+      ).getTime()
+    : null;
   const nowDayMidnight = new Date(
     now.getFullYear(),
     now.getMonth(),
     now.getDate()
   ).getTime();
 
-  const diffMs = Math.max(0, nowDayMidnight - installDayMidnight);
-  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+  const diffMs = installDayMidnight !== null ? Math.max(0, nowDayMidnight - installDayMidnight) : 0;
+  const diffDays = installDayMidnight !== null ? Math.round(diffMs / (1000 * 60 * 60 * 24)) : 30;
   const diasActivo = diffDays + 1;
 
   const meses = [
-    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
   ];
-  const fechaInstalacionLabel = `${parsedInstall.getDate()} de ${meses[parsedInstall.getMonth()]}, ${parsedInstall.getFullYear()}`;
+  const fechaInstalacionLabel = parsedInstall
+    ? `${parsedInstall.getDate()} de ${meses[parsedInstall.getMonth()]}, ${parsedInstall.getFullYear()}`
+    : "Servicio Activo";
 
   // Extraer el mapa de tráfico real recibido de WispHub
   const trafficPayload =
@@ -996,22 +1138,26 @@ export function calculateServiceUsage(raw: any): NetworkUsageData {
     const dayDate = new Date(dayTime);
     const dateStr = `${dayDate.getFullYear()}-${String(dayDate.getMonth() + 1).padStart(2, "0")}-${String(dayDate.getDate()).padStart(2, "0")}`;
     const isoDateStr = dayDate.toISOString().split("T")[0];
-    const isBefore = dayTime < installDayMidnight;
-    const isInstallDay = dayTime === installDayMidnight;
+    const isBefore = installDayMidnight !== null ? dayTime < installDayMidnight : false;
+    const isInstallDay = installDayMidnight !== null ? dayTime === installDayMidnight : false;
     const isToday = i === 0;
 
-    let label = "Sin servicio previo";
-    let activo = false;
+    let label = installDayMidnight !== null ? "Sin servicio previo" : "Tráfico registrado";
+    let activo = !isBefore;
 
     if (!isBefore) {
       activo = true;
-      const dayNum = Math.round((dayTime - installDayMidnight) / 86400000) + 1;
-      if (isInstallDay) {
-        label = "Día 1 (Instalación)";
-      } else if (isToday) {
-        label = `Día ${dayNum} (Hoy)`;
+      if (installDayMidnight !== null) {
+        const dayNum = Math.round((dayTime - installDayMidnight) / 86400000) + 1;
+        if (isInstallDay) {
+          label = "Día 1 (Instalación)";
+        } else if (isToday) {
+          label = `Día ${dayNum} (Hoy)`;
+        } else {
+          label = `Día ${dayNum}`;
+        }
       } else {
-        label = `Día ${dayNum}`;
+        label = isToday ? "Hoy" : dayNames[dayDate.getDay()];
       }
     }
 
@@ -1273,15 +1419,52 @@ export function mapWisphubClientToProfile(
   const celularExtraido = extractSafeString(raw.celular || raw.telefono_movil || raw.telefono || "");
   const rawDir = extractSafeString(raw.direccion || raw.direccion_completa, "Dirección Urbana Registrada");
   const direccionExtraida = rawDir.replace(/\r\n|\r|\n/g, " - ").replace(/\s{2,}/g, " ").trim();
-  const barrioExtraido = extractSafeString(raw.barrio || raw.localidad || raw.sector, "");
-  const ciudadExtraida = extractSafeString(raw.ciudad || raw.municipio || raw.localidad, "Colombia");
+  
+  let barrioExtraido = extractSafeString(raw.barrio || raw.localidad || raw.sector || (raw as any)["Barrio/Localidad"], "");
+  if (!barrioExtraido && cedulaStr) {
+    const local = getLocalClientFallback(cedulaStr);
+    if (local?.barrio) {
+      barrioExtraido = extractSafeString(local.barrio, "");
+    }
+  }
+  if ((!barrioExtraido || barrioExtraido.toLowerCase().includes("curillo caqueta")) && direccionExtraida) {
+    const m = direccionExtraida.match(
+      /(?:barrio|b\/|brrio|br\.)\s+([a-záéíóúñ\s]+?)(?=\s+(?:llegando|frente|enfrente|cerca|enseguida|diagonal|casa|calle|cra|carrera|manzana|mz|donde|,|-|\.|$))/i
+    );
+    if (m && m[1]) {
+      barrioExtraido = m[1].trim();
+    }
+  }
+
+  let rawCiudad = extractSafeString(raw.ciudad || raw.municipio, "");
+  if (!rawCiudad || rawCiudad.toLowerCase() === "colombia") {
+    rawCiudad = "Curillo";
+  }
+  const ciudadExtraida = rawCiudad;
+
+  let rawDepto = extractSafeString((raw as any).departamento || (raw as any).estado_provincia || (raw as any).provincia, "Caquetá");
+  const invalidDeptos = ["colombia", "activo", "cortado", "suspendido", "cancelado", "desactivado", "1", "2", "3"];
+  if (!rawDepto || invalidDeptos.includes(rawDepto.toLowerCase())) {
+    rawDepto = "Caquetá";
+  }
+  const departamentoExtraido = rawDepto;
 
   // Fechas de activación y consumo
   const fechaInstalacionRaw = extractSafeString(
-    (raw as any).fecha_instalacion || (raw as any).fecha_creacion || (raw as any).fecha_ingreso || ""
+    (raw as any).fecha_instalacion ||
+    (raw as any).fecha_alta ||
+    (raw as any).fecha_activacion ||
+    (raw as any).fecha_ingreso ||
+    (raw as any).created_at ||
+    (raw as any).fecha_creacion ||
+    ""
   );
   const fechaRegistroRaw = extractSafeString(
-    (raw as any).fecha_registro || (raw as any).date_joined || (raw as any).created_at || ""
+    (raw as any).fecha_registro ||
+    (raw as any).fecha_alta ||
+    (raw as any).date_joined ||
+    (raw as any).created_at ||
+    ""
   );
   const consumoRed = calculateServiceUsage({
     ...raw,
@@ -1299,6 +1482,9 @@ export function mapWisphubClientToProfile(
     direccion: direccionExtraida,
     barrio: barrioExtraido,
     ciudad: ciudadExtraida,
+    municipio: ciudadExtraida,
+    departamento: departamentoExtraido,
+    estado_provincia: departamentoExtraido,
     estadoServicio,
     estadoServicioLabel,
     plan: {
@@ -1321,9 +1507,29 @@ export function mapWisphubClientToProfile(
       fechaLimitePago,
       diaPago: diaCorte,
       diaCorte,
+      fecha_instalacion: (raw as any).fecha_instalacion || (raw as any).fecha_alta || (raw as any).fecha_ingreso || (raw as any).created_at || null,
+      fecha_alta: (raw as any).fecha_alta || null,
+      fecha_activacion: (raw as any).fecha_activacion || null,
+      fecha_ingreso: (raw as any).fecha_ingreso || null,
+      created_at: (raw as any).created_at || null,
+      modelo_router: extractSafeString((raw as any).modelo_router || (raw as any).router || (raw as any).modelo || routerOntExtraido),
+      equipo: extractSafeString((raw as any).equipo || (raw as any).modelo_router || routerOntExtraido),
+      barrio: barrioExtraido,
+      ciudad: ciudadExtraida,
+      municipio: ciudadExtraida,
+      departamento: departamentoExtraido,
+      estado_provincia: departamentoExtraido,
+      direccion: direccionExtraida,
     },
     fechaInstalacion: fechaInstalacionRaw || undefined,
     fechaRegistro: fechaRegistroRaw || undefined,
+    fecha_instalacion: (raw as any).fecha_instalacion || (raw as any).fecha_alta || (raw as any).fecha_ingreso || (raw as any).created_at || null,
+    fecha_alta: (raw as any).fecha_alta || null,
+    fecha_activacion: (raw as any).fecha_activacion || null,
+    fecha_ingreso: (raw as any).fecha_ingreso || null,
+    created_at: (raw as any).created_at || null,
+    modelo_router: extractSafeString((raw as any).modelo_router || (raw as any).router || (raw as any).modelo || routerOntExtraido),
+    equipo: extractSafeString((raw as any).equipo || (raw as any).modelo_router || routerOntExtraido),
     saldoTotalPendiente: saldoTotal,
     facturasPendientesCount,
     consumoRed,
@@ -1460,6 +1666,13 @@ export async function getClientByDocument(
           nombre: matchedService.nombre || basicClient.usuario_rb || basicClient.nombre,
           nombre_completo: matchedService.nombre_completo || matchedService.nombre || basicClient.usuario_rb,
           direccion: matchedService.direccion || basicClient.direccion,
+          barrio: matchedService.barrio || basicClient.barrio,
+          ciudad: matchedService.ciudad || basicClient.ciudad,
+          municipio: matchedService.municipio || basicClient.municipio,
+          departamento: matchedService.departamento || basicClient.departamento,
+          modelo_router: matchedService.modelo_router || basicClient.modelo_router,
+          equipo: matchedService.equipo || basicClient.equipo,
+          mac: matchedService.mac || basicClient.mac,
           alias: matchedService.alias || basicClient.alias,
           plan_nombre: matchedService.planNombre || basicClient.plan_nombre,
         };
@@ -1528,6 +1741,8 @@ export async function getClientByDocument(
     if (matchedService) {
       if (!fullClient.usuario && matchedService.usuario) fullClient.usuario = matchedService.usuario;
       if (!fullClient.direccion && matchedService.direccion) fullClient.direccion = matchedService.direccion;
+      if (!fullClient.barrio && matchedService.barrio) fullClient.barrio = matchedService.barrio;
+      if (!fullClient.ciudad && matchedService.ciudad) fullClient.ciudad = matchedService.ciudad;
       if (!fullClient.nombre && matchedService.nombre) fullClient.nombre = matchedService.nombre;
       if (!fullClient.nombre_completo && (matchedService.nombre_completo || matchedService.nombre)) {
         fullClient.nombre_completo = matchedService.nombre_completo || matchedService.nombre;
@@ -1581,6 +1796,10 @@ export async function getClientByDocument(
     }
     if (matchedService?.direccion && (!profile.direccion || profile.direccion === "Dirección Urbana Registrada")) {
       profile.direccion = matchedService.direccion;
+    }
+    if (matchedService?.barrio && (!profile.barrio || profile.barrio.toLowerCase().includes("curillo caqueta"))) {
+      profile.barrio = matchedService.barrio;
+      if (profile.servicio) profile.servicio.barrio = matchedService.barrio;
     }
     if (matchedService?.nombre && (!profile.nombreCompleto || profile.nombreCompleto.toLowerCase().includes("cédula") || profile.nombreCompleto.toLowerCase().includes("cedula"))) {
       profile.nombreCompleto = matchedService.nombre;

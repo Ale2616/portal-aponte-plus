@@ -22,6 +22,7 @@ import { SecretPinModal } from "@/components/SecretPinModal";
 import { AdminControlModal } from "@/components/AdminControlModal";
 import { SpeedTestModal } from "@/components/SpeedTestModal";
 import { MultiLineSelectorModal, ServiceOption } from "@/components/MultiLineSelectorModal";
+import { PushNotificationCard } from "@/components/PushNotificationCard";
 import { Loader2, CheckCircle2, Radio } from "lucide-react";
 import { useConfig } from "@/context/ConfigContext";
 
@@ -176,15 +177,66 @@ function PortalContent() {
           originalClient?.nombreCompleto ||
           "Cliente Registrado";
 
+        // Si data o data.servicios contiene el servicio o cliente activo original de WispHub:
+        const servicioActivo = Array.isArray(data.servicios)
+          ? data.servicios.find((s: any) => String(s.idServicio || s.id_servicio || s.id) === String(effectiveServiceId)) || data.servicios[0]
+          : data.cliente?.servicio;
+
+        if (servicioActivo) {
+          if (!servicioActivo.fecha_instalacion && data.fecha_instalacion) {
+            servicioActivo.fecha_instalacion = data.fecha_instalacion;
+          }
+          if (!servicioActivo.barrio && (data.barrio || data.cliente?.barrio)) {
+            servicioActivo.barrio = data.barrio || data.cliente?.barrio;
+          }
+          if (!servicioActivo.ciudad || servicioActivo.ciudad.toLowerCase() === "colombia") {
+            servicioActivo.ciudad = data.ciudad || data.cliente?.ciudad || "Curillo";
+          }
+          if (!servicioActivo.departamento || servicioActivo.departamento.toLowerCase() === "colombia") {
+            servicioActivo.departamento = data.departamento || data.cliente?.departamento || "Caquetá";
+          }
+          if (!servicioActivo.modelo_router && (data.cliente?.servicio?.modelo_router || data.cliente?.servicio?.routerOnt)) {
+            servicioActivo.modelo_router = data.cliente?.servicio?.modelo_router || data.cliente?.servicio?.routerOnt;
+          }
+          if (!servicioActivo.equipo && (data.cliente?.servicio?.equipo || servicioActivo.modelo_router)) {
+            servicioActivo.equipo = data.cliente?.servicio?.equipo || servicioActivo.modelo_router;
+          }
+          if (!servicioActivo.mac && data.cliente?.servicio?.mac) {
+            servicioActivo.mac = data.cliente?.servicio?.mac;
+          }
+        }
+
+        const rawBarrioFinal = data.barrio || data.cliente?.barrio || servicioActivo?.barrio || originalClient?.barrio || "";
+        const rawCiudadFinal = data.ciudad || data.cliente?.ciudad || servicioActivo?.ciudad || "Curillo";
+        const rawDeptoFinal = data.departamento || data.cliente?.departamento || servicioActivo?.departamento || "Caquetá";
+
         const clienteActivo: ClientProfile = {
           ...data.cliente,
           cedula: cleanDoc || data.cliente?.cedula || data.cedula || originalClient?.cedula || "",
           telefono: data.cliente?.telefono || originalClient?.telefono || "",
           celular: data.cliente?.celular || originalClient?.celular || "",
           nombreCompleto: nombreFinal,
+          barrio: rawBarrioFinal,
+          ciudad: (!rawCiudadFinal || rawCiudadFinal.toLowerCase() === "colombia") ? "Curillo" : rawCiudadFinal,
+          departamento: (!rawDeptoFinal || rawDeptoFinal.toLowerCase() === "colombia") ? "Caquetá" : rawDeptoFinal,
+          fecha_instalacion: data.fecha_instalacion || data.cliente?.fecha_instalacion || servicioActivo?.fecha_instalacion,
+          fecha_alta: data.fecha_alta || data.cliente?.fecha_alta || servicioActivo?.fecha_alta,
+          fecha_ingreso: data.fecha_ingreso || data.cliente?.fecha_ingreso || servicioActivo?.fecha_ingreso,
+          created_at: data.created_at || data.cliente?.created_at || servicioActivo?.created_at,
+          servicioActivo: servicioActivo || data.cliente?.servicio,
+          clienteActivo: data.cliente,
         };
         (clienteActivo as any).nombre = clienteActivo.nombreCompleto;
         (clienteActivo as any).id_servicio = effectiveServiceId;
+        (clienteActivo as any).barrio = clienteActivo.barrio;
+        (clienteActivo as any).ciudad = clienteActivo.ciudad;
+        (clienteActivo as any).departamento = clienteActivo.departamento;
+        (clienteActivo as any).servicioActivo = servicioActivo || data.cliente?.servicio;
+        (clienteActivo as any).clienteActivo = data.cliente;
+        (clienteActivo as any).fecha_instalacion = clienteActivo.fecha_instalacion;
+        (clienteActivo as any).fecha_alta = clienteActivo.fecha_alta;
+        (clienteActivo as any).fecha_ingreso = clienteActivo.fecha_ingreso;
+        (clienteActivo as any).created_at = clienteActivo.created_at;
 
         setOriginalClient(clienteActivo);
 
@@ -384,7 +436,19 @@ function PortalContent() {
             idServicio: selectedServiceId || baseClient.servicio?.idServicio,
             ip: servicioSeleccionado.ip || baseClient.servicio?.ip || "",
             nodo: servicioSeleccionado.nodo || baseClient.servicio?.nodo || "",
-            routerOnt: baseClient.servicio?.routerOnt || "Router ONT Dual Band 5G",
+            routerOnt: servicioSeleccionado.equipo || servicioSeleccionado.modelo_router || baseClient.servicio?.routerOnt || "Router ONT Dual Band 5G",
+            mac: servicioSeleccionado.mac || baseClient.servicio?.mac,
+            modelo_router: servicioSeleccionado.modelo_router || (baseClient.servicio as any)?.modelo_router,
+            equipo: servicioSeleccionado.equipo || (baseClient.servicio as any)?.equipo,
+            barrio: servicioSeleccionado.barrio || baseClient.barrio,
+            ciudad: servicioSeleccionado.ciudad || baseClient.ciudad,
+            municipio: servicioSeleccionado.municipio || (baseClient.servicio as any)?.municipio,
+            departamento: servicioSeleccionado.departamento || (baseClient.servicio as any)?.departamento,
+            estado_provincia: servicioSeleccionado.estado_provincia || (baseClient.servicio as any)?.estado_provincia,
+            fecha_instalacion: servicioSeleccionado.fecha_instalacion || (baseClient.servicio as any)?.fecha_instalacion,
+            fecha_alta: servicioSeleccionado.fecha_alta || (baseClient.servicio as any)?.fecha_alta,
+            fecha_ingreso: servicioSeleccionado.fecha_ingreso || (baseClient.servicio as any)?.fecha_ingreso,
+            created_at: servicioSeleccionado.created_at || (baseClient.servicio as any)?.created_at,
             fechaCorte: baseClient.servicio?.fechaCorte || "",
             fechaLimitePago: baseClient.servicio?.fechaLimitePago || "",
             diaPago: baseClient.servicio?.diaPago || 1,
@@ -394,6 +458,12 @@ function PortalContent() {
         (updatedClient as any).id_servicio = selectedServiceId;
         (updatedClient as any).direccion = servicioSeleccionado.direccion;
         (updatedClient as any).alias = (servicioSeleccionado as any).alias;
+        (updatedClient as any).servicioActivo = servicioSeleccionado;
+        (updatedClient as any).clienteActivo = baseClient;
+        (updatedClient as any).fecha_instalacion = servicioSeleccionado.fecha_instalacion || (baseClient as any)?.fecha_instalacion;
+        (updatedClient as any).fecha_alta = servicioSeleccionado.fecha_alta || (baseClient as any)?.fecha_alta;
+        (updatedClient as any).fecha_ingreso = servicioSeleccionado.fecha_ingreso || (baseClient as any)?.fecha_ingreso;
+        (updatedClient as any).created_at = servicioSeleccionado.created_at || (baseClient as any)?.created_at;
         setClient(updatedClient);
       }
 
@@ -654,6 +724,12 @@ function PortalContent() {
 
             {/* 3. Tarjeta de Métricas y Tráfico de Red */}
             <NetworkUsageCard client={client} />
+
+            {/* Banner de Notificaciones Push Web para Confirmación de Pagos */}
+            <PushNotificationCard
+              cedula={client.cedula}
+              idServicio={client.servicio?.idServicio?.toString()}
+            />
 
             {/* 4. Canales de Pago Directo (Estilo Fintech) */}
             <DirectPaymentCard onOpenReport={() => handleOpenPayment()} />

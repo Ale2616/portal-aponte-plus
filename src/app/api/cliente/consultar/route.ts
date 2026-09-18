@@ -83,10 +83,49 @@ export async function POST(req: NextRequest) {
     );
     const totalPendiente = pendientes.reduce((acc, inv) => acc + (inv.saldoPendiente || inv.total || 0), 0);
 
+    const rawServicio = (cliente.servicio as any) || {};
+    const rawCliente = (cliente as any) || {};
+    const fechaInstalacion =
+      rawServicio.fecha_instalacion ||
+      rawServicio.fecha_alta ||
+      rawServicio.fecha_ingreso ||
+      rawServicio.created_at ||
+      rawCliente.fecha_ingreso ||
+      null;
+
     const finalCedula = cliente.cedula || cleanDocument;
+    const finalBarrio =
+      cliente.barrio ||
+      rawServicio.barrio ||
+      rawCliente.barrio ||
+      "";
+    const rawCiudad = cliente.ciudad || rawServicio.ciudad || "Curillo";
+    const finalCiudad = (!rawCiudad || rawCiudad.toLowerCase() === "colombia") ? "Curillo" : rawCiudad;
+    const rawDepto = cliente.departamento || rawServicio.departamento || "Caquetá";
+    const finalDepto = (!rawDepto || rawDepto.toLowerCase() === "colombia") ? "Caquetá" : rawDepto;
+
     const finalCliente = {
       ...cliente,
       cedula: finalCedula,
+      barrio: finalBarrio,
+      ciudad: finalCiudad,
+      municipio: finalCiudad,
+      departamento: finalDepto,
+      fecha_instalacion: fechaInstalacion,
+      fecha_alta: rawServicio.fecha_alta || rawCliente.fecha_alta || null,
+      fecha_ingreso: rawServicio.fecha_ingreso || rawCliente.fecha_ingreso || null,
+      created_at: rawServicio.created_at || rawCliente.created_at || null,
+      servicio: {
+        ...cliente.servicio,
+        barrio: rawServicio.barrio || finalBarrio,
+        ciudad: finalCiudad,
+        municipio: finalCiudad,
+        departamento: finalDepto,
+        fecha_instalacion: fechaInstalacion,
+        fecha_alta: rawServicio.fecha_alta || rawCliente.fecha_alta || null,
+        fecha_ingreso: rawServicio.fecha_ingreso || rawCliente.fecha_ingreso || null,
+        created_at: rawServicio.created_at || rawCliente.created_at || null,
+      },
     };
 
     // 3. Respuesta estandarizada para el frontend y campos normalizados requeridos
@@ -102,12 +141,19 @@ export async function POST(req: NextRequest) {
       nombre: finalCliente.nombreCompleto,
       cedula: finalCedula,
       usuario: finalCliente.usuario,
+      barrio: finalBarrio,
+      ciudad: finalCiudad,
+      departamento: finalDepto,
       plan: finalCliente.plan.nombre,
       valor: finalCliente.plan.precioMensual,
       estado: finalCliente.estadoServicio,
       fecha_corte: finalCliente.servicio.fechaCorte,
       saldo_pendiente: finalCliente.saldoTotalPendiente,
       ip: finalCliente.servicio.ip,
+      fecha_instalacion: fechaInstalacion,
+      fecha_alta: rawServicio.fecha_alta || rawCliente.fecha_alta || null,
+      fecha_ingreso: rawServicio.fecha_ingreso || rawCliente.fecha_ingreso || null,
+      created_at: rawServicio.created_at || rawCliente.created_at || null,
     });
   } catch (err: any) {
     console.error("[API /cliente/consultar Error]:", err);
