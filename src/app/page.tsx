@@ -168,7 +168,12 @@ function PortalContent() {
         }
 
         // 2. Guardado en consulta exitosa: guarda en localStorage tanto la cédula como el 'id_servicio' seleccionado
-        const effectiveServiceId = selectedServiceId || data.cliente?.servicio?.idServicio;
+        const effectiveServiceId =
+          selectedServiceId ||
+          data.id_servicio ||
+          data.cliente?.id_servicio ||
+          data.cliente?.servicio?.idServicio ||
+          data.cliente?.id;
         if (typeof window !== "undefined") {
           try {
             localStorage.setItem("cliente_cedula", cleanDoc);
@@ -741,7 +746,7 @@ function PortalContent() {
             {/* Banner de Notificaciones Push Web para Confirmación de Pagos */}
             <PushNotificationCard
               cedula={client.cedula}
-              idServicio={client.servicio?.idServicio?.toString()}
+              idServicio={client.id_servicio || client.servicio?.idServicio?.toString()}
             />
 
             {/* 4. Canales de Pago Directo (Estilo Fintech) */}

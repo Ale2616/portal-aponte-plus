@@ -4,18 +4,10 @@ import { saveSubscription } from "@/lib/push-notifications";
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/notificaciones/suscribir
+ * POST /api/push/save-subscription
  *
- * Registra o actualiza la suscripción Web Push del abonado en la persistencia.
- * Payload esperado:
- * {
- *   cedula: string,
- *   id_servicio?: string,
- *   subscription: {
- *     endpoint: string,
- *     keys: { p256dh: string, auth: string }
- *   }
- * }
+ * Registra o actualiza la suscripción Web Push en la base de datos/almacenamiento para el cliente.
+ * Soporta formato WebPush estándar y upsert por endpoint.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -64,11 +56,12 @@ export async function POST(req: NextRequest) {
       success: true,
       message: "Suscripción a notificaciones push registrada con éxito.",
       cedula: cleanCedula,
+      id_servicio: id_servicio || undefined,
     });
   } catch (error: any) {
-    console.error("[API Suscribir Push Error]:", error);
+    console.error("[API /api/push/save-subscription Error]:", error);
     return NextResponse.json(
-      { success: false, error: error?.message || "Error al registrar la suscripción." },
+      { success: false, error: error?.message || "Error al registrar la suscripción push." },
       { status: 500 }
     );
   }

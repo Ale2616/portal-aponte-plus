@@ -128,11 +128,25 @@ export async function POST(req: NextRequest) {
       },
     };
 
+    const resolvedIdServicio = String(
+      finalCliente.id_servicio ||
+      finalCliente.servicio?.idServicio ||
+      finalCliente.id ||
+      targetServiceId ||
+      ""
+    ).trim();
+
+    console.log(`[Tráfico] Cédula ${finalCedula} vinculada a id_servicio: ${resolvedIdServicio}`);
+
     // 3. Respuesta estandarizada para el frontend y campos normalizados requeridos
     return NextResponse.json({
       success: true,
       source: "wisphub_api",
-      cliente: finalCliente,
+      id_servicio: resolvedIdServicio,
+      cliente: {
+        ...finalCliente,
+        id_servicio: resolvedIdServicio,
+      },
       facturas,
       pendientes,
       historial,

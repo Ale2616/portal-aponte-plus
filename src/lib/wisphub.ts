@@ -1473,6 +1473,7 @@ export function mapWisphubClientToProfile(
 
   return {
     id: idStr,
+    id_servicio: idStr,
     cedula: cedulaStr,
     usuario: extractSafeString(raw.usuario) || undefined,
     nombreCompleto: fullName,
@@ -1790,6 +1791,13 @@ export async function getClientByDocument(
 
     // 5. Mapear a ClientProfile estandarizado
     const profile = mapWisphubClientToProfile(fullClient, invoices, directBalance, trafficData);
+
+    if (serviceId) {
+      profile.id_servicio = String(serviceId);
+      if (profile.servicio) {
+        profile.servicio.idServicio = String(serviceId);
+      }
+    }
 
     if ((!profile.cedula || profile.cedula.trim() === "") && cleanDoc) {
       profile.cedula = cleanDoc;

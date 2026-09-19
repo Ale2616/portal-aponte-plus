@@ -4,6 +4,7 @@ export type InvoiceStatus = 'pagada' | 'pendiente' | 'vencida';
 
 export interface ClientProfile {
   id: string; // WispHub Client ID o ID de Servicio
+  id_servicio?: string; // ID numérico de servicio WispHub
   cedula: string;
   usuario?: string; // WispHub username (ej. orlindaperez@aponteplus)
   nombreCompleto: string;

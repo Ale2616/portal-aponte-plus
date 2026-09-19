@@ -65,7 +65,7 @@ export function PushNotificationCard({
         setIsSubscribed(true);
         const subJson = subscription.toJSON();
         if (subJson.endpoint && subJson.keys?.p256dh && subJson.keys?.auth) {
-          await fetch("/api/notificaciones/suscribir", {
+          await fetch("/api/push/save-subscription", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -151,8 +151,8 @@ export function PushNotificationCard({
         });
       }
 
-      // 5. Enviar suscripción al backend con la cédula del cliente
-      const response = await fetch("/api/notificaciones/suscribir", {
+      // 5. Enviar suscripción inmediatamente a /api/push/save-subscription con la cédula del cliente
+      const response = await fetch("/api/push/save-subscription", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -194,13 +194,60 @@ export function PushNotificationCard({
     }
 
     setIsTesting(true);
-    const toastId = toast.loading("Enviando notificación push de prueba al dispositivo...");
+    const toastId = toast.loading("Verificando dispositivo y enviando notificación push de prueba...");
 
     try {
-      // Re-sincronizar suscripción antes de enviar la prueba
-      await syncSubscriptionWithServer();
+      // 1. Asegurar suscripción activa antes de disparar la prueba: si no tiene suscripción guardada, intentar suscribir en este instante
+      let subActive = false;
+      if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+        try {
+          const registration = await navigator.serviceWorker.ready;
+          let sub = await registration.pushManager.getSubscription();
 
-      const response = await fetch("/api/notificaciones/enviar", {
+          const vapidPublicKey =
+            process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
+            "BFSzM8wajctH6kO4PLnZSWkByuDGcnB-DaDhQH8a5O3GJ9zH5WM5Lcni_KUxalp8f4r5EAWcfx01bQrAe8SSK_E";
+
+          if (!sub && vapidPublicKey) {
+            let perm = Notification.permission;
+            if (perm === "default") {
+              perm = await Notification.requestPermission();
+              setPermission(perm);
+            }
+            if (perm === "granted") {
+              const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
+              sub = await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey,
+              });
+            }
+          }
+
+          if (sub) {
+            setIsSubscribed(true);
+            const subJson = sub.toJSON();
+            if (subJson.endpoint && subJson.keys?.p256dh && subJson.keys?.auth) {
+              const saveRes = await fetch("/api/push/save-subscription", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  cedula: String(cedula).trim(),
+                  id_servicio: idServicio ? String(idServicio).trim() : undefined,
+                  subscription: subJson,
+                }),
+              });
+              if (saveRes.ok) {
+                subActive = true;
+              }
+            }
+          }
+        } catch (subErr) {
+          console.warn("[Push Test Auto-Subscribe Warning]:", subErr);
+        }
+      }
+
+      // 2. Enviar notificación push al backend
+      let response = await fetch("/api/notificaciones/enviar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -210,7 +257,46 @@ export function PushNotificationCard({
         }),
       });
 
-      const data = await response.json();
+      let data = await response.json();
+
+      // Si falló porque no encontró suscripción activa, intentar una suscripción de emergencia en el navegador y reintentar
+      if ((!response.ok || !data.success) && data.error && data.error.includes("No se encontró ninguna suscripción")) {
+        try {
+          const registration = await navigator.serviceWorker.ready;
+          const vapidPublicKey =
+            process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
+            "BFSzM8wajctH6kO4PLnZSWkByuDGcnB-DaDhQH8a5O3GJ9zH5WM5Lcni_KUxalp8f4r5EAWcfx01bQrAe8SSK_E";
+          const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
+          const newSub = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey,
+          });
+
+          await fetch("/api/push/save-subscription", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              cedula: String(cedula).trim(),
+              id_servicio: idServicio ? String(idServicio).trim() : undefined,
+              subscription: newSub.toJSON(),
+            }),
+          });
+
+          // Reintentar envío
+          response = await fetch("/api/notificaciones/enviar", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              cedula: String(cedula).trim(),
+              id_servicio: idServicio ? String(idServicio).trim() : undefined,
+              isTest: true,
+            }),
+          });
+          data = await response.json();
+        } catch (emergencyErr) {
+          console.error("[Push Emergency Subscribe Error]:", emergencyErr);
+        }
+      }
 
       if (!response.ok || !data.success) {
         throw new Error(data.error || "No se pudo entregar la notificación push de prueba.");

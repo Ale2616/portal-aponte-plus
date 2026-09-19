@@ -173,6 +173,8 @@ export async function saveSubscription(
     console.warn("[Push Local File Save Error]:", localErr);
   }
 
+  console.log(`[Push] Suscripción guardada exitosamente para cédula: ${cleanCedula}`);
+
   return savedInRedis || true;
 }
 

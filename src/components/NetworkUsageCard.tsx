@@ -50,14 +50,19 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Extraer dinámicamente el id_servicio y cédula del cliente consultado
-  const clientId = String(client.id || (client as any)?.id_servicio || "").trim();
+  const clientId = String(
+    client.id_servicio ||
+    (client as any)?.servicio?.idServicio ||
+    client.id ||
+    ""
+  ).trim();
   const clientCedula = String(
     client.cedula || (client as any)?.documento || ""
   ).trim();
 
   // Carga del historial de consumo mensual desde la API dinámica
   useEffect(() => {
-    if (!clientId) return;
+    if (!clientId && !clientCedula) return;
 
     const fetchHistorial = async () => {
       setIsLoading(true);
@@ -65,10 +70,10 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
 
       try {
         const params = new URLSearchParams();
-        params.set("id_servicio", clientId);
+        if (clientId) params.set("id_servicio", clientId);
         if (clientCedula) params.set("cedula", clientCedula);
 
-        const res = await fetch(`/api/trafico/sincronizar-historial?${params.toString()}`);
+        const res = await fetch(`/api/trafico/historial?${params.toString()}`);
 
         if (!res.ok) {
           throw new Error(`Error del servidor (${res.status})`);
@@ -98,10 +103,10 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
     setIsRefreshing(true);
     try {
       const params = new URLSearchParams();
-      params.set("id_servicio", clientId);
+      if (clientId) params.set("id_servicio", clientId);
       if (clientCedula) params.set("cedula", clientCedula);
 
-      const res = await fetch(`/api/trafico/sincronizar-historial?${params.toString()}`);
+      const res = await fetch(`/api/trafico/historial?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
