@@ -1,91 +1,78 @@
-const CACHE_NAME = 'aponte-plus-pwa-v3';
+// ===================================================================
+// SERVICE WORKER - PORTAL INTERNET APONTE (PWA & WEB PUSH)
+// ===================================================================
+
+const CACHE_NAME = 'aponte-plus-pwa-v4';
 const ASSETS_TO_CACHE = [
+  '/',
   '/manifest.json',
-  '/logo.jpg',
-  '/logo.png',
   '/icon.png',
   '/badge.png',
-  '/icons/icon-192x192.png',
-  '/icons/icon-512x512.png',
-  '/icons/apple-touch-icon.png'
+  '/logo.png'
 ];
 
+// 1. Ciclo de vida: Forzar activación inmediata sin esperar
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    })
-  );
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
-      );
-    })
+    Promise.all([
+      self.clients.claim(),
+      caches.keys().then((keys) => {
+        return Promise.all(
+          keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+        );
+      })
+    ])
   );
-  self.clients.claim();
 });
 
+// 2. Intercepción de red solo para estáticos
 self.addEventListener('fetch', (event) => {
-  // Solo interceptar peticiones GET
   if (event.request.method !== 'GET') return;
-
-  // No interceptar peticiones dinámicas de API ni navegación HTML para servir siempre la versión en vivo
   if (event.request.url.includes('/api/') || event.request.mode === 'navigate') {
     return;
   }
-
   event.respondWith(
     fetch(event.request).catch(() => caches.match(event.request))
   );
 });
 
-// ===================================================================
-// GESTIÓN DE NOTIFICACIONES PUSH (Web Push API)
-// ===================================================================
-self.addEventListener('push', function (event) {
-  let data = {};
+// 3. Listener simplificado al máximo con logs detallados para Push
+self.addEventListener('push', (event) => {
+  console.log('[SW] Evento push recibido:', event);
+  let data = { title: "Internet Aponte", body: "Tu pago ha sido confirmado ✅" };
   if (event.data) {
     try {
       data = event.data.json();
     } catch (e) {
-      data = {
-        title: 'Internet Aponte',
-        body: event.data.text() || 'Tu pago del servicio de internet ha sido registrado con éxito.',
-      };
+      data.body = event.data.text();
     }
   }
 
-  const title = data.title || 'Internet Aponte';
-  const options = {
-    body: data.body || 'Tu pago del servicio de internet ha sido registrado con éxito.',
-    icon: data.icon || '/logo.png',
-    badge: data.badge || '/badge.png',
-    vibrate: [100, 50, 100],
-    tag: data.tag || 'pago-confirmado',
-    renotify: true,
-    data: {
-      url: data.url || '/',
-      dateOfArrival: Date.now(),
-    },
-  };
-
   event.waitUntil(
-    self.registration.showNotification(title, options)
+    self.registration.showNotification(data.title || "Internet Aponte", {
+      body: data.body || "Tu pago ha sido confirmado ✅",
+      icon: '/icon.png',
+      badge: '/icon.png',
+      tag: 'pago-' + Date.now(),
+      requireInteraction: true,
+      data: {
+        url: data.url || '/'
+      }
+    })
   );
 });
 
-self.addEventListener('notificationclick', function (event) {
+// 4. Clic en notificación: enfocar ventana abierta o abrir una nueva
+self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const targetUrl = event.notification.data?.url || '/';
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // 1. Si ya hay una pestaña abierta con el portal, enfocarla
       for (const client of windowClients) {
         if ('focus' in client) {
           if (client.url.includes(targetUrl) || client.url.includes(self.registration.scope)) {
@@ -96,11 +83,9 @@ self.addEventListener('notificationclick', function (event) {
           }
         }
       }
-      // 2. Si no hay pestaña abierta, abrir una nueva
       if (clients.openWindow) {
         return clients.openWindow(targetUrl);
       }
     })
   );
 });
-

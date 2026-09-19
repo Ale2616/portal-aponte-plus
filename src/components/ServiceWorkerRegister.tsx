@@ -9,6 +9,8 @@ export function ServiceWorkerRegister() {
         .register("/sw.js", { scope: "/" })
         .then((registration) => {
           console.log("[PWA] Service Worker registrado exitosamente. Scope:", registration.scope);
+          // Forzar chequeo de actualización inmediata
+          registration.update().catch(() => {});
 
           // Verificar si hay actualizaciones pendientes del Service Worker
           registration.addEventListener("updatefound", () => {
@@ -16,7 +18,7 @@ export function ServiceWorkerRegister() {
             if (installingWorker) {
               installingWorker.addEventListener("statechange", () => {
                 if (installingWorker.state === "installed" && navigator.serviceWorker.controller) {
-                  console.log("[PWA] Nueva versión del Service Worker disponible.");
+                  console.log("[PWA] Nueva versión del Service Worker activada.");
                 }
               });
             }

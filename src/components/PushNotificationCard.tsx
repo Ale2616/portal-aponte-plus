@@ -1,7 +1,17 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Bell, BellRing, CheckCircle2, Loader2, Send, X } from "lucide-react";
+import {
+  Bell,
+  BellRing,
+  CheckCircle2,
+  Loader2,
+  Send,
+  X,
+  AlertTriangle,
+  ShieldAlert,
+  Info,
+} from "lucide-react";
 import { toast } from "sonner";
 
 interface PushNotificationCardProps {
@@ -40,6 +50,16 @@ export function PushNotificationCard({
   const [isTesting, setIsTesting] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
+  const [localDiagnosticWarning, setLocalDiagnosticWarning] = useState<string | null>(null);
+  const [serverDiagnosticError, setServerDiagnosticError] = useState<string | null>(null);
+
+  // Obtener clave pública VAPID limpia
+  const getCleanVapidPublicKey = () => {
+    const raw =
+      process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
+      "BFSzM8wajctH6kO4PLnZSWkByuDGcnB-DaDhQH8a5O3GJ9zH5WM5Lcni_KUxalp8f4r5EAWcfx01bQrAe8SSK_E";
+    return raw.trim().replace(/^["']|["']$/g, "");
+  };
 
   // Sincroniza la suscripción activa con el servidor asegurando la vinculación cédula <-> subscription
   const syncSubscriptionWithServer = useCallback(async (): Promise<boolean> => {
@@ -49,9 +69,7 @@ export function PushNotificationCard({
       const registration = await navigator.serviceWorker.ready;
       let subscription = await registration.pushManager.getSubscription();
 
-      const vapidPublicKey =
-        process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
-        "BFSzM8wajctH6kO4PLnZSWkByuDGcnB-DaDhQH8a5O3GJ9zH5WM5Lcni_KUxalp8f4r5EAWcfx01bQrAe8SSK_E";
+      const vapidPublicKey = getCleanVapidPublicKey();
 
       if (!subscription && vapidPublicKey && Notification.permission === "granted") {
         const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
@@ -94,7 +112,6 @@ export function PushNotificationCard({
         setPermission(currentPerm);
 
         if (currentPerm === "granted" && cedula) {
-          // Si el usuario ya dio permisos en el navegador, asegurar que la suscripción esté vinculada a esta cédula en el backend
           syncSubscriptionWithServer();
         }
       }
@@ -114,6 +131,8 @@ export function PushNotificationCard({
     }
 
     setIsLoading(true);
+    setLocalDiagnosticWarning(null);
+    setServerDiagnosticError(null);
 
     try {
       // 1. Pedir permiso al usuario
@@ -121,22 +140,16 @@ export function PushNotificationCard({
       setPermission(requestedPermission);
 
       if (requestedPermission !== "granted") {
-        toast.info("Permiso no concedido", {
-          description: "Puedes activar las notificaciones desde la configuración de tu navegador.",
-        });
+        const warnMsg =
+          "⚠️ Tu navegador o sistema operativo (Windows/Android) tiene las notificaciones bloqueadas. Habilítalas en Ajustes > Aplicaciones > Chrome > Notificaciones.";
+        setLocalDiagnosticWarning(warnMsg);
+        toast.info("Permiso no concedido", { description: warnMsg });
         setIsLoading(false);
         return;
       }
 
-      // 2. Clave pública VAPID
-      const vapidPublicKey =
-        process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
-        "BFSzM8wajctH6kO4PLnZSWkByuDGcnB-DaDhQH8a5O3GJ9zH5WM5Lcni_KUxalp8f4r5EAWcfx01bQrAe8SSK_E";
-
-      if (!vapidPublicKey) {
-        throw new Error("Clave pública VAPID no encontrada.");
-      }
-
+      // 2. Clave pública VAPID limpia
+      const vapidPublicKey = getCleanVapidPublicKey();
       const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
 
       // 3. Esperar a que el service worker esté listo
@@ -187,6 +200,12 @@ export function PushNotificationCard({
     }
   };
 
+  /**
+   * Diagnóstico real en el botón "Probar notificación en este dispositivo":
+   * 1. Prueba LOCAL inmediata con reg.showNotification para validar SO y pantalla.
+   * 2. Si falla la alerta local, muestra advertencia en rojo.
+   * 3. Si funciona la local, dispara push desde backend; si este falla, diagnostica credenciales VAPID.
+   */
   const handleTestNotification = async () => {
     if (!cedula) {
       toast.error("Cédula no disponible para la prueba.");
@@ -194,60 +213,86 @@ export function PushNotificationCard({
     }
 
     setIsTesting(true);
-    const toastId = toast.loading("Verificando dispositivo y enviando notificación push de prueba...");
+    setLocalDiagnosticWarning(null);
+    setServerDiagnosticError(null);
+    const toastId = toast.loading("Ejecutando prueba de pantalla y canal push...");
 
     try {
-      // 1. Asegurar suscripción activa antes de disparar la prueba: si no tiene suscripción guardada, intentar suscribir en este instante
-      let subActive = false;
-      if (typeof window !== "undefined" && "serviceWorker" in navigator) {
-        try {
-          const registration = await navigator.serviceWorker.ready;
-          let sub = await registration.pushManager.getSubscription();
+      // ─────────────────────────────────────────────────────────────────
+      // PASO 1: Diagnóstico LOCAL inmediato en pantalla
+      // ─────────────────────────────────────────────────────────────────
+      if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("Notification" in window)) {
+        throw new Error("Este dispositivo no tiene soporte para notificaciones.");
+      }
 
-          const vapidPublicKey =
-            process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
-            "BFSzM8wajctH6kO4PLnZSWkByuDGcnB-DaDhQH8a5O3GJ9zH5WM5Lcni_KUxalp8f4r5EAWcfx01bQrAe8SSK_E";
+      let currentPerm = Notification.permission;
+      if (currentPerm === "default") {
+        currentPerm = await Notification.requestPermission();
+        setPermission(currentPerm);
+      }
 
-          if (!sub && vapidPublicKey) {
-            let perm = Notification.permission;
-            if (perm === "default") {
-              perm = await Notification.requestPermission();
-              setPermission(perm);
-            }
-            if (perm === "granted") {
-              const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
-              sub = await registration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey,
-              });
-            }
-          }
+      if (currentPerm !== "granted") {
+        const warningMsg =
+          "⚠️ Tu navegador o sistema operativo (Windows/Android) tiene las notificaciones bloqueadas. Habilítalas en Ajustes > Aplicaciones > Chrome > Notificaciones.";
+        setLocalDiagnosticWarning(warningMsg);
+        toast.error("Notificaciones bloqueadas", { id: toastId, description: warningMsg, duration: 8000 });
+        setIsTesting(false);
+        return;
+      }
 
-          if (sub) {
-            setIsSubscribed(true);
-            const subJson = sub.toJSON();
-            if (subJson.endpoint && subJson.keys?.p256dh && subJson.keys?.auth) {
-              const saveRes = await fetch("/api/push/save-subscription", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  cedula: String(cedula).trim(),
-                  id_servicio: idServicio ? String(idServicio).trim() : undefined,
-                  subscription: subJson,
-                }),
-              });
-              if (saveRes.ok) {
-                subActive = true;
-              }
-            }
-          }
-        } catch (subErr) {
-          console.warn("[Push Test Auto-Subscribe Warning]:", subErr);
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        await reg.showNotification("🔔 Prueba de Pantalla", {
+          body: "Si ves este mensaje, tu navegador y tu sistema operativo permiten notificaciones.",
+          icon: "/icon.png",
+          badge: "/icon.png",
+          tag: "prueba-pantalla-" + Date.now(),
+          requireInteraction: true,
+        });
+        console.log("[Push Test] Prueba de pantalla local disparada con éxito.");
+      } catch (localErr: any) {
+        console.error("[Push Local Diagnostic Error]:", localErr);
+        const warningMsg =
+          "⚠️ Tu navegador o sistema operativo (Windows/Android) tiene las notificaciones bloqueadas. Habilítalas en Ajustes > Aplicaciones > Chrome > Notificaciones.";
+        setLocalDiagnosticWarning(warningMsg);
+        toast.error("Alerta de pantalla bloqueada", { id: toastId, description: warningMsg, duration: 9000 });
+        setIsTesting(false);
+        return;
+      }
+
+      // ─────────────────────────────────────────────────────────────────
+      // PASO 2: Diagnóstico del canal Push Remoto (Backend + VAPID)
+      // ─────────────────────────────────────────────────────────────────
+      const vapidPublicKey = getCleanVapidPublicKey();
+      const registration = await navigator.serviceWorker.ready;
+      let sub = await registration.pushManager.getSubscription();
+
+      if (!sub && vapidPublicKey) {
+        const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
+        sub = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey,
+        });
+      }
+
+      if (sub) {
+        setIsSubscribed(true);
+        const subJson = sub.toJSON();
+        if (subJson.endpoint && subJson.keys?.p256dh && subJson.keys?.auth) {
+          await fetch("/api/push/save-subscription", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              cedula: String(cedula).trim(),
+              id_servicio: idServicio ? String(idServicio).trim() : undefined,
+              subscription: subJson,
+            }),
+          });
         }
       }
 
-      // 2. Enviar notificación push al backend
-      let response = await fetch("/api/notificaciones/enviar", {
+      // 3. Enviar notificación push al backend
+      const response = await fetch("/api/notificaciones/enviar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -257,58 +302,27 @@ export function PushNotificationCard({
         }),
       });
 
-      let data = await response.json();
-
-      // Si falló porque no encontró suscripción activa, intentar una suscripción de emergencia en el navegador y reintentar
-      if ((!response.ok || !data.success) && data.error && data.error.includes("No se encontró ninguna suscripción")) {
-        try {
-          const registration = await navigator.serviceWorker.ready;
-          const vapidPublicKey =
-            process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
-            "BFSzM8wajctH6kO4PLnZSWkByuDGcnB-DaDhQH8a5O3GJ9zH5WM5Lcni_KUxalp8f4r5EAWcfx01bQrAe8SSK_E";
-          const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
-          const newSub = await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey,
-          });
-
-          await fetch("/api/push/save-subscription", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              cedula: String(cedula).trim(),
-              id_servicio: idServicio ? String(idServicio).trim() : undefined,
-              subscription: newSub.toJSON(),
-            }),
-          });
-
-          // Reintentar envío
-          response = await fetch("/api/notificaciones/enviar", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              cedula: String(cedula).trim(),
-              id_servicio: idServicio ? String(idServicio).trim() : undefined,
-              isTest: true,
-            }),
-          });
-          data = await response.json();
-        } catch (emergencyErr) {
-          console.error("[Push Emergency Subscribe Error]:", emergencyErr);
-        }
-      }
+      const data = await response.json();
 
       if (!response.ok || !data.success) {
-        throw new Error(data.error || "No se pudo entregar la notificación push de prueba.");
+        const serverErrorMsg = `⚠️ La prueba local funcionó, pero el push del servidor no llegó (${data.error || "Fallo en backend"}). El fallo reside en las credenciales VAPID del backend.`;
+        setServerDiagnosticError(serverErrorMsg);
+        console.error("[Push Test Backend Error]:", data.error);
+        toast.error("Error en Push del Servidor", {
+          id: toastId,
+          description: serverErrorMsg,
+          duration: 9000,
+        });
+        return;
       }
 
-      toast.success("¡Notificación de prueba enviada!", {
+      toast.success("¡Prueba completada con éxito!", {
         id: toastId,
-        description: "Revisa las notificaciones emergentes de tu sistema o dispositivo.",
-        duration: 5000,
+        description: "Tu pantalla y el servidor push están sincronizados y funcionando.",
+        duration: 6000,
       });
     } catch (error: any) {
-      console.error("[Push Test Error]:", error);
+      console.error("[Push Test Global Error]:", error);
       toast.error("Error en la prueba de push", {
         id: toastId,
         description: error.message || "Verifica que tengas los permisos concedidos.",
@@ -325,8 +339,50 @@ export function PushNotificationCard({
     }
   };
 
-  // Si no está soportado o fue descartado, no mostrar nada
-  if (!isSupported || isDismissed) {
+  // Si el navegador no soporta ServiceWorker / Push
+  if (!isSupported) {
+    return null;
+  }
+
+  // Si el usuario bloqueó el permiso en el navegador o sistema
+  if (permission === "denied" || localDiagnosticWarning) {
+    return (
+      <div
+        className={`p-4 rounded-3xl bg-rose-50/90 dark:bg-rose-950/30 border border-rose-300/80 dark:border-rose-800/60 shadow-sm text-xs space-y-2.5 ${className}`}
+      >
+        <div className="flex items-start gap-3">
+          <div className="p-2 rounded-2xl bg-rose-500/15 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5">
+            <ShieldAlert className="w-5 h-5" />
+          </div>
+          <div className="space-y-1">
+            <p className="font-bold text-rose-900 dark:text-rose-200">
+              Notificaciones bloqueadas en el dispositivo
+            </p>
+            <p className="text-[11px] text-rose-700 dark:text-rose-300 leading-relaxed">
+              ⚠️ Tu navegador o sistema operativo (Windows/Android) tiene las notificaciones bloqueadas. Habilítalas en Ajustes &gt; Aplicaciones &gt; Chrome &gt; Notificaciones.
+            </p>
+            <p className="text-[10px] text-rose-600/80 dark:text-rose-400/80">
+              En Windows: Configuración &gt; Sistema &gt; Notificaciones (desactiva &quot;No molestar&quot; / Asistente de concentración).
+            </p>
+          </div>
+        </div>
+
+        <div className="flex justify-end pt-1">
+          <button
+            type="button"
+            onClick={handleTestNotification}
+            disabled={isTesting}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-xs cursor-pointer disabled:opacity-50"
+          >
+            {isTesting ? "Reintentando prueba..." : "Reintentar prueba de pantalla"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Si el usuario la descartó voluntariamente
+  if (isDismissed) {
     return null;
   }
 
@@ -334,7 +390,9 @@ export function PushNotificationCard({
   if (isSubscribed && permission === "granted") {
     if (variant === "compact") {
       return (
-        <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 ${className}`}>
+        <div
+          className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 ${className}`}
+        >
           <CheckCircle2 className="w-3.5 h-3.5" />
           <span>Alertas de pago activas</span>
           <button
@@ -351,56 +409,77 @@ export function PushNotificationCard({
     }
 
     return (
-      <div className={`p-4 rounded-3xl bg-emerald-50/90 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800/50 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs ${className}`}>
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
-            <BellRing className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <p className="font-bold text-emerald-900 dark:text-emerald-200">
-                Notificaciones Push Activas
-              </p>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
-                <CheckCircle2 className="w-3 h-3" />
-                Conectado
-              </span>
+      <div
+        className={`p-4 rounded-3xl bg-emerald-50/90 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800/50 shadow-xs flex flex-col gap-3 text-xs ${className}`}
+      >
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
+              <BellRing className="w-5 h-5" />
             </div>
-            <p className="text-[11px] text-emerald-700/90 dark:text-emerald-400/90 mt-0.5">
-              Recibirás una alerta en este dispositivo cuando tu pago sea confirmado.
-            </p>
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="font-bold text-emerald-900 dark:text-emerald-200">
+                  Notificaciones Push Activas
+                </p>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
+                  <CheckCircle2 className="w-3 h-3" />
+                  Conectado
+                </span>
+              </div>
+              <p className="text-[11px] text-emerald-700/90 dark:text-emerald-400/90 mt-0.5">
+                Recibirás una alerta en este dispositivo cuando tu pago sea confirmado.
+              </p>
+            </div>
           </div>
+
+          {/* Botón de Diagnóstico y Prueba en este dispositivo */}
+          <button
+            type="button"
+            onClick={handleTestNotification}
+            disabled={isTesting}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-[11px] font-bold bg-white dark:bg-emerald-900/40 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/70 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700/60 shadow-xs transition-all cursor-pointer active:scale-95 disabled:opacity-50 shrink-0 self-end sm:self-center"
+            title="Ejecuta una prueba inmediata en pantalla y valida el canal de entrega"
+          >
+            {isTesting ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Probando pantalla y servidor...</span>
+              </>
+            ) : (
+              <>
+                <Send className="w-3.5 h-3.5" />
+                <span>Probar notificación en este dispositivo</span>
+              </>
+            )}
+          </button>
         </div>
 
-        {/* Botón de Prueba en este dispositivo */}
-        <button
-          type="button"
-          onClick={handleTestNotification}
-          disabled={isTesting}
-          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-[11px] font-bold bg-white dark:bg-emerald-900/40 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/70 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700/60 shadow-xs transition-all cursor-pointer active:scale-95 disabled:opacity-50 shrink-0 self-end sm:self-center"
-          title="Envía una notificación de prueba a este dispositivo para validar el canal"
-        >
-          {isTesting ? (
-            <>
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              <span>Enviando prueba...</span>
-            </>
-          ) : (
-            <>
-              <Send className="w-3.5 h-3.5" />
-              <span>Probar notificación en este dispositivo</span>
-            </>
-          )}
-        </button>
+        {/* Diagnóstico en rojo si la prueba local falló */}
+        {localDiagnosticWarning && (
+          <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-start gap-2 animate-in fade-in">
+            <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <p>{localDiagnosticWarning}</p>
+              <p className="text-[10px] font-normal opacity-85">
+                Revisa que Windows o Android no tenga activado el modo &quot;No molestar&quot;.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Diagnóstico en ámbar si la prueba local funcionó pero el backend VAPID falló */}
+        {serverDiagnosticError && (
+          <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200 text-xs font-semibold flex items-start gap-2 animate-in fade-in">
+            <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <p>{serverDiagnosticError}</p>
+          </div>
+        )}
       </div>
     );
   }
 
-  // Si el usuario bloqueó el permiso en el navegador
-  if (permission === "denied") {
-    return null;
-  }
-
+  // Estado inicial: Invitar al usuario a activar notificaciones
   return (
     <div
       className={`relative overflow-hidden p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-sky-50 via-indigo-50/60 to-emerald-50/50 dark:from-slate-800/90 dark:via-indigo-950/20 dark:to-slate-900 border border-sky-200/80 dark:border-slate-700/80 shadow-md ${className}`}

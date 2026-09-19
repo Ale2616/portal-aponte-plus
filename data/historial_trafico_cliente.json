@@ -104,10 +104,10 @@
     "anio": 2026,
     "mes": 1,
     "mes_nombre": "Ene",
-    "descarga_gb": 47,
-    "subida_gb": 3.5,
-    "total_gb": 50.5,
-    "updated_at": "2026-09-19T15:21:12.786Z"
+    "descarga_gb": 120.8,
+    "subida_gb": 4.6,
+    "total_gb": 125.4,
+    "updated_at": "2026-09-19T15:30:00.000Z"
   },
   {
     "id_servicio": "703",
@@ -115,10 +115,10 @@
     "anio": 2026,
     "mes": 2,
     "mes_nombre": "Feb",
-    "descarga_gb": 34.9,
-    "subida_gb": 5.4,
-    "total_gb": 40.3,
-    "updated_at": "2026-09-19T15:21:12.786Z"
+    "descarga_gb": 88.5,
+    "subida_gb": 3.6,
+    "total_gb": 92.1,
+    "updated_at": "2026-09-19T15:30:00.000Z"
   },
   {
     "id_servicio": "703",
@@ -126,10 +126,10 @@
     "anio": 2026,
     "mes": 3,
     "mes_nombre": "Mar",
-    "descarga_gb": 36.8,
-    "subida_gb": 4.8,
-    "total_gb": 41.6,
-    "updated_at": "2026-09-19T15:21:12.786Z"
+    "descarga_gb": 99.8,
+    "subida_gb": 4.5,
+    "total_gb": 104.3,
+    "updated_at": "2026-09-19T15:30:00.000Z"
   },
   {
     "id_servicio": "703",
@@ -137,10 +137,10 @@
     "anio": 2026,
     "mes": 4,
     "mes_nombre": "Abr",
-    "descarga_gb": 38.7,
-    "subida_gb": 4.2,
-    "total_gb": 42.9,
-    "updated_at": "2026-09-19T15:21:12.786Z"
+    "descarga_gb": 84.6,
+    "subida_gb": 3.4,
+    "total_gb": 88.0,
+    "updated_at": "2026-09-19T15:30:00.000Z"
   },
   {
     "id_servicio": "703",
@@ -148,10 +148,10 @@
     "anio": 2026,
     "mes": 5,
     "mes_nombre": "May",
-    "descarga_gb": 40.6,
-    "subida_gb": 3.6,
-    "total_gb": 44.2,
-    "updated_at": "2026-09-19T15:21:12.786Z"
+    "descarga_gb": 92.7,
+    "subida_gb": 3.8,
+    "total_gb": 96.5,
+    "updated_at": "2026-09-19T15:30:00.000Z"
   },
   {
     "id_servicio": "703",
@@ -159,10 +159,10 @@
     "anio": 2026,
     "mes": 6,
     "mes_nombre": "Jun",
-    "descarga_gb": 42.5,
-    "subida_gb": 3,
-    "total_gb": 45.5,
-    "updated_at": "2026-09-19T15:21:12.786Z"
+    "descarga_gb": 105.8,
+    "subida_gb": 4.4,
+    "total_gb": 110.2,
+    "updated_at": "2026-09-19T15:30:00.000Z"
   },
   {
     "id_servicio": "703",
@@ -170,10 +170,10 @@
     "anio": 2026,
     "mes": 7,
     "mes_nombre": "Jul",
-    "descarga_gb": 44.4,
+    "descarga_gb": 110.1,
     "subida_gb": 4.9,
-    "total_gb": 49.3,
-    "updated_at": "2026-09-19T15:21:12.786Z"
+    "total_gb": 115.0,
+    "updated_at": "2026-09-19T15:30:00.000Z"
   },
   {
     "id_servicio": "703",
@@ -181,20 +181,20 @@
     "anio": 2026,
     "mes": 8,
     "mes_nombre": "Ago",
-    "descarga_gb": 46.3,
-    "subida_gb": 4.3,
-    "total_gb": 50.6,
-    "updated_at": "2026-09-19T15:21:12.786Z"
+    "descarga_gb": 104.2,
+    "subida_gb": 4.4,
+    "total_gb": 108.6,
+    "updated_at": "2026-09-19T15:30:00.000Z"
   },
   {
     "id_servicio": "703",
     "cedula": "1117524362",
     "anio": 2026,
-    "mes": 12,
-    "mes_nombre": "Dic",
-    "descarga_gb": 39.9,
-    "subida_gb": 4.4,
-    "total_gb": 44.3,
-    "updated_at": "2026-09-19T15:21:12.786Z"
+    "mes": 9,
+    "mes_nombre": "Sep",
+    "descarga_gb": 59.7,
+    "subida_gb": 2.6,
+    "total_gb": 62.3,
+    "updated_at": "2026-09-19T15:30:00.000Z"
   }
 ]

@@ -60,7 +60,7 @@ export function ConsumptionChart({ data, periodLabel, isYearly = false }: Consum
 
   // Si el valor máximo es menor a 1.2 GB, normalizar a MiB para mayor precisión visual
   const useMib = maxGb < 1.2 && !isYearly;
-  const unitLabel = useMib ? "MiB" : "GB";
+  const unitLabel = useMib ? "MiB" : "GiB";
   const multiplier = useMib ? 1024 : 1;
 
   useEffect(() => {

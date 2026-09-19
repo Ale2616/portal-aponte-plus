@@ -26,6 +26,7 @@ import { PushNotificationCard } from "@/components/PushNotificationCard";
 import { Loader2, CheckCircle2, Radio } from "lucide-react";
 import { useConfig } from "@/context/ConfigContext";
 import { useAutoSyncInvoices } from "@/hooks/useAutoSyncInvoices";
+import { PaymentSuccessModal } from "@/components/PaymentSuccessModal";
 
 // Función para extraer y capitalizar únicamente el primer nombre
 const obtenerPrimerNombre = (nombreCompleto?: string): string => {
@@ -98,7 +99,12 @@ function PortalContent() {
   const hasAutoLoggedRef = useRef(false);
 
   // Revalidación automática en segundo plano (Tab Focus / Polling cada 12s / Detección de pago silenciosa)
-  const { isSyncingSilently, lastSyncTime } = useAutoSyncInvoices({
+  const {
+    isSyncingSilently,
+    lastSyncTime,
+    isPaymentCelebrationOpen,
+    closePaymentCelebration,
+  } = useAutoSyncInvoices({
     client,
     invoices,
     setClient,
@@ -880,6 +886,14 @@ function PortalContent() {
         servicios={multipleServices}
         onSelectService={handleSelectService}
         isLoading={isLoading}
+      />
+
+      {/* Sistema Redundante: Modal In-App de Confirmación de Pago con Sonido */}
+      <PaymentSuccessModal
+        isOpen={isPaymentCelebrationOpen}
+        onClose={closePaymentCelebration}
+        clientName={client?.nombreCompleto || (client as any)?.nombre}
+        cedula={client?.cedula || pendingDocument}
       />
 
       {/* Botón Flotante Persistente de WhatsApp */}

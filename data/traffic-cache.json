@@ -54,5 +54,61 @@
     ],
     "cachedAt": 1789008170833,
     "version": 2
+  },
+  "703": {
+    "serviceId": "703",
+    "dias": [
+      {
+        "fecha": "2026-09-13",
+        "downloadGb": 8.4,
+        "uploadGb": 0.4
+      },
+      {
+        "fecha": "2026-09-14",
+        "downloadGb": 9.1,
+        "uploadGb": 0.4
+      },
+      {
+        "fecha": "2026-09-15",
+        "downloadGb": 8.7,
+        "uploadGb": 0.3
+      },
+      {
+        "fecha": "2026-09-16",
+        "downloadGb": 9.5,
+        "uploadGb": 0.4
+      },
+      {
+        "fecha": "2026-09-17",
+        "downloadGb": 8.9,
+        "uploadGb": 0.3
+      },
+      {
+        "fecha": "2026-09-18",
+        "downloadGb": 7.8,
+        "uploadGb": 0.4
+      },
+      {
+        "fecha": "2026-09-19",
+        "downloadGb": 7.3,
+        "uploadGb": 0.4
+      }
+    ],
+    "meses": [
+      { "mes": "Ene", "mesNumero": 1, "year": 2026, "downloadGb": 120.8, "uploadGb": 4.6, "totalGb": 125.4 },
+      { "mes": "Feb", "mesNumero": 2, "year": 2026, "downloadGb": 88.5, "uploadGb": 3.6, "totalGb": 92.1 },
+      { "mes": "Mar", "mesNumero": 3, "year": 2026, "downloadGb": 99.8, "uploadGb": 4.5, "totalGb": 104.3 },
+      { "mes": "Abr", "mesNumero": 4, "year": 2026, "downloadGb": 84.6, "uploadGb": 3.4, "totalGb": 88.0 },
+      { "mes": "May", "mesNumero": 5, "year": 2026, "downloadGb": 92.7, "uploadGb": 3.8, "totalGb": 96.5 },
+      { "mes": "Jun", "mesNumero": 6, "year": 2026, "downloadGb": 105.8, "uploadGb": 4.4, "totalGb": 110.2 },
+      { "mes": "Jul", "mesNumero": 7, "year": 2026, "downloadGb": 110.1, "uploadGb": 4.9, "totalGb": 115.0 },
+      { "mes": "Ago", "mesNumero": 8, "year": 2026, "downloadGb": 104.2, "uploadGb": 4.4, "totalGb": 108.6 },
+      { "mes": "Sep", "mesNumero": 9, "year": 2026, "downloadGb": 59.7, "uploadGb": 2.6, "totalGb": 62.3 },
+      { "mes": "Oct", "mesNumero": 10, "year": 2026, "downloadGb": 0.0, "uploadGb": 0.0, "totalGb": 0.0 },
+      { "mes": "Nov", "mesNumero": 11, "year": 2026, "downloadGb": 0.0, "uploadGb": 0.0, "totalGb": 0.0 },
+      { "mes": "Dic", "mesNumero": 12, "year": 2026, "downloadGb": 0.0, "uploadGb": 0.0, "totalGb": 0.0 }
+    ],
+    "cachedAt": 1789831900000,
+    "version": 2
   }
 }

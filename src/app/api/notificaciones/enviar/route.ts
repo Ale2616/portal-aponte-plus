@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
 
     const cleanCedula = String(cedula || "").trim();
     if (!cleanCedula) {
+      console.error("[API Enviar Push Error]: El campo 'cedula' es obligatorio.");
       return NextResponse.json(
         { success: false, error: "El campo 'cedula' es obligatorio para enviar la notificación." },
         { status: 400 }
@@ -42,14 +43,17 @@ export async function POST(req: NextRequest) {
     });
 
     if (!result.success) {
+      console.error("[Web Push Error] Falló la entrega de la notificación push:", result.error);
       return NextResponse.json(
         {
           success: false,
           error: result.error || "No se pudo entregar la notificación push a ningún dispositivo.",
         },
-        { status: 200 } // Retornar 200 para no romper flujos administrativos si el cliente no activó push
+        { status: 400 } // Error explícito, NUNCA devolver 200 OK falso ante fallas
       );
     }
+
+    console.log(`[Web Push] Notificación entregada exitosamente a ${result.deliveredCount} dispositivo(s) para cédula: ${cleanCedula}`);
 
     return NextResponse.json({
       success: true,

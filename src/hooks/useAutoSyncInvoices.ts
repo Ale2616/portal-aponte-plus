@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { ClientProfile, Invoice } from "@/lib/types";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
+import { playPaymentSuccessChime } from "@/lib/sound";
 
 interface UseAutoSyncInvoicesProps {
   client: ClientProfile | null;
@@ -39,7 +40,7 @@ function isInvoicePaid(inv?: Invoice): boolean {
  * 1. Revalidación al recuperar el foco de la pestaña / ventana (Tab Visibility / Window Focus).
  * 2. Sondeo periódico (polling) cada 10-15s en segundo plano mientras la pestaña esté visible.
  * 3. Actualización silenciosa (silent refetch) sin pantallas de carga invasivas.
- * 4. Notificación visual ("¡Pago confirmado con éxito!") con confeti al detectar un pago.
+ * 4. Notificación visual ("¡Pago Registrado con Éxito! 🎉 Gracias por tu pago, tu servicio se encuentra al día.") con sonido sutil y confeti.
  * 5. Limpieza estricta de memoria (clearInterval / removeEventListener).
  */
 export function useAutoSyncInvoices({
@@ -53,6 +54,7 @@ export function useAutoSyncInvoices({
 }: UseAutoSyncInvoicesProps) {
   const [isSyncingSilently, setIsSyncingSilently] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [isPaymentCelebrationOpen, setIsPaymentCelebrationOpen] = useState(false);
 
   // Referencias para seguimiento de estado previo y control de concurrencia
   const isSyncingRef = useRef(false);
@@ -162,21 +164,30 @@ export function useAutoSyncInvoices({
 
         setLastSyncTime(new Date());
 
-        // Si se detectó que una factura pasó a pagada, lanzar celebración y banner/toast
+        // Si se detectó que una factura pasó a pagada, lanzar celebración, sonido sutil y modal emergente
         if (pagoDetectado) {
+          // 1. Sonido sutil de confirmación
+          playPaymentSuccessChime();
+
+          // 2. Activar modal emergente destacado
+          setIsPaymentCelebrationOpen(true);
+
+          // 3. Confeti festivo
           try {
             confetti({
-              particleCount: 100,
-              spread: 70,
-              origin: { y: 0.6 },
+              particleCount: 120,
+              spread: 80,
+              origin: { y: 0.55 },
+              colors: ["#10b981", "#0284c7", "#f59e0b", "#38bdf8", "#34d399"],
             });
           } catch {
             // Manejo silencioso en caso de no soporte de canvas
           }
 
-          toast.success("¡Pago confirmado con éxito! Tu saldo se ha actualizado.", {
-            description: "Hemos verificado el pago de tu factura en el sistema central.",
-            duration: 7000,
+          // 4. Toast redundante con el texto exacto requerido
+          toast.success("¡Pago Registrado con Éxito! 🎉", {
+            description: "Gracias por tu pago, tu servicio se encuentra al día.",
+            duration: 8000,
           });
         }
       }
@@ -238,9 +249,33 @@ export function useAutoSyncInvoices({
     };
   }, [client, hasResetConsultation, pollingIntervalMs, triggerSilentSync]);
 
+  const closePaymentCelebration = useCallback(() => {
+    setIsPaymentCelebrationOpen(false);
+  }, []);
+
+  const triggerTestPaymentCelebration = useCallback(() => {
+    playPaymentSuccessChime();
+    setIsPaymentCelebrationOpen(true);
+    try {
+      confetti({
+        particleCount: 120,
+        spread: 80,
+        origin: { y: 0.55 },
+        colors: ["#10b981", "#0284c7", "#f59e0b", "#38bdf8", "#34d399"],
+      });
+    } catch {}
+    toast.success("¡Pago Registrado con Éxito! 🎉", {
+      description: "Gracias por tu pago, tu servicio se encuentra al día.",
+      duration: 8000,
+    });
+  }, []);
+
   return {
     isSyncingSilently,
     lastSyncTime,
     triggerSilentSync,
+    isPaymentCelebrationOpen,
+    closePaymentCelebration,
+    triggerTestPaymentCelebration,
   };
 }

@@ -19,12 +19,18 @@ export interface StoredPushSubscription {
  * Inicializa la configuración de VAPID para web-push
  */
 export function ensureVapidConfig(): boolean {
-  const subject = (process.env.VAPID_SUBJECT || "mailto:admin@aponteplus.com").trim();
-  const publicKey = (process.env.VAPID_PUBLIC_KEY || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "").trim();
-  const privateKey = (process.env.VAPID_PRIVATE_KEY || "").trim();
+  const subject = (process.env.VAPID_SUBJECT || "mailto:soporte@internetaponteplus.com")
+    .trim()
+    .replace(/^["']|["']$/g, "");
+  const publicKey = (process.env.VAPID_PUBLIC_KEY || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "")
+    .trim()
+    .replace(/^["']|["']$/g, "");
+  const privateKey = (process.env.VAPID_PRIVATE_KEY || "")
+    .trim()
+    .replace(/^["']|["']$/g, "");
 
   if (!publicKey || !privateKey) {
-    console.error("[Web Push VAPID Error]: Faltan VAPID_PUBLIC_KEY o VAPID_PRIVATE_KEY en las variables de entorno.");
+    console.error("[Web Push VAPID Error]: Faltan VAPID_PUBLIC_KEY o VAPID_PRIVATE_KEY válidas en las variables de entorno.");
     return false;
   }
 
@@ -32,7 +38,7 @@ export function ensureVapidConfig(): boolean {
     webpush.setVapidDetails(subject, publicKey, privateKey);
     return true;
   } catch (err: any) {
-    console.error("[Web Push VAPID Config Error]:", err?.message);
+    console.error("[Web Push VAPID Config Error]: Llaves VAPID no válidas en el backend:", err?.message);
     return false;
   }
 }

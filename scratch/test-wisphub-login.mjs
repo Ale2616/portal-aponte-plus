@@ -40,6 +40,12 @@ async function testLogin() {
   if (res2.status === 200) {
     const err = text2.match(/class=['"][^'"]*alert[^'"]*['"][^>]*>([\s\S]*?)<\/div>/i);
     console.log('Alert in page:', err ? err[1].trim() : 'None found');
+    const formErrors = text2.match(/class=['"][^'"]*errorlist[^'"]*['"][^>]*>([\s\S]*?)<\/ul>/i);
+    console.log('Form errors:', formErrors ? formErrors[1].trim() : 'None found');
+    const hasCaptcha = text2.includes('recaptcha') || text2.includes('hcaptcha') || text2.includes('turnstile');
+    console.log('Has captcha:', hasCaptcha);
+    fs.writeFileSync('scratch/login-res-200.html', text2);
+    console.log('Saved to scratch/login-res-200.html');
   } else if (res2.status === 302) {
     console.log('Login SUCCESSFUL!');
     // Merge cookies

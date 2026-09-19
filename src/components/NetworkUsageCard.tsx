@@ -173,10 +173,10 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
       }
     });
 
-    // Formato inteligente: si > 1024 GB, mostrar en TB
+    // Formato inteligente: si > 1024 GiB, mostrar en TiB
     const formatTotal = (gb: number): string => {
-      if (gb >= 1024) return `${(gb / 1024).toFixed(2)} TB`;
-      return `${gb.toFixed(1)} GB`;
+      if (gb >= 1024) return `${(gb / 1024).toFixed(2)} TiB`;
+      return `${gb.toFixed(1)} GiB`;
     };
 
     return {
@@ -277,16 +277,16 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
                 </span>
               </div>
               <p className="text-2xl sm:text-3xl font-extrabold font-sans tabular-nums text-slate-900 dark:text-slate-100">
-                {hasData ? stats.totalAnualLabel : "0 GB"}
+                {hasData ? stats.totalAnualLabel : "0 GiB"}
               </p>
               <div className="flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
                 <span className="flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-sky-500" />
-                  ↓ {stats.totalDl.toFixed(1)} GB
+                  ↓ {stats.totalDl.toFixed(1)} GiB
                 </span>
                 <span className="flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-amber-500" />
-                  ↑ {stats.totalUl.toFixed(1)} GB
+                  ↑ {stats.totalUl.toFixed(1)} GiB
                 </span>
               </div>
             </div>
