@@ -25,6 +25,7 @@ import { MultiLineSelectorModal, ServiceOption } from "@/components/MultiLineSel
 import { PushNotificationCard } from "@/components/PushNotificationCard";
 import { Loader2, CheckCircle2, Radio } from "lucide-react";
 import { useConfig } from "@/context/ConfigContext";
+import { useAutoSyncInvoices } from "@/hooks/useAutoSyncInvoices";
 
 // Función para extraer y capitalizar únicamente el primer nombre
 const obtenerPrimerNombre = (nombreCompleto?: string): string => {
@@ -95,6 +96,17 @@ function PortalContent() {
   }, []);
 
   const hasAutoLoggedRef = useRef(false);
+
+  // Revalidación automática en segundo plano (Tab Focus / Polling cada 12s / Detección de pago silenciosa)
+  const { isSyncingSilently, lastSyncTime } = useAutoSyncInvoices({
+    client,
+    invoices,
+    setClient,
+    setInvoices,
+    hasResetConsultation,
+    pendingDocument,
+    pollingIntervalMs: 12000,
+  });
 
   // Buscar cliente por documento de identidad y opcionalmente id_servicio
   const handleSearch = useCallback(
@@ -365,14 +377,15 @@ function PortalContent() {
     }
   }, []);
 
-  // Sincronización en tiempo real de facturas vinculada al id_servicio activo además de la cédula
+  // Sincronización inicial de facturas vinculada al id_servicio activo además de la cédula
+  const activeServiceId = String((client as any)?.id_servicio || client?.servicio?.idServicio || client?.id || "");
+  const activeDocument = String(client?.cedula || pendingDocument || "");
+
   useEffect(() => {
-    const serviceId = (client as any)?.id_servicio || client?.servicio?.idServicio || client?.id;
-    const doc = client?.cedula || pendingDocument || "";
-    if (serviceId && doc) {
-      cargarFacturasPorServicio(String(serviceId), doc);
+    if (activeServiceId && activeDocument) {
+      cargarFacturasPorServicio(activeServiceId, activeDocument);
     }
-  }, [(client as any)?.id_servicio, client?.id]);
+  }, [activeServiceId, activeDocument, cargarFacturasPorServicio]);
 
   // 2. Cambio de Línea Multi-Servicio: Overlay bloqueante + nombre de la línea seleccionada + ciclo completo
   const handleSelectService = useCallback(
@@ -734,13 +747,43 @@ function PortalContent() {
             {/* 4. Canales de Pago Directo (Estilo Fintech) */}
             <DirectPaymentCard onOpenReport={() => handleOpenPayment()} />
 
-            {/* 5. Historial Completo de Facturas con Pestañas */}
-            <InvoiceList
-              invoices={invoices}
-              isLoading={isLoadingInvoices}
-              onViewPdf={(invoice) => setSelectedInvoiceForPdf(invoice)}
-              onPayInvoice={(invoice) => handleOpenPayment(invoice)}
-            />
+            {/* 5. Historial Completo de Facturas con Pestañas y Revalidación en Segundo Plano */}
+            <div className="space-y-2.5">
+              {/* Indicador discreto de sincronización automática en vivo */}
+              <div className="flex flex-wrap items-center justify-between gap-2 px-3 sm:px-4 py-2 rounded-2xl bg-slate-50/80 dark:bg-slate-900/60 backdrop-blur-md border border-slate-200/60 dark:border-slate-800 text-xs font-sans shadow-xs transition-colors">
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-2 w-2">
+                    <span
+                      className={`absolute inline-flex h-full w-full rounded-full ${
+                        isSyncingSilently ? "animate-ping bg-sky-400 opacity-75" : "bg-emerald-400 opacity-40"
+                      }`}
+                    />
+                    <span
+                      className={`relative inline-flex rounded-full h-2 w-2 ${
+                        isSyncingSilently ? "bg-sky-500" : "bg-emerald-500"
+                      }`}
+                    />
+                  </span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-200 text-[11px]">
+                    {isSyncingSilently
+                      ? "Verificando pagos en tiempo real..."
+                      : "Sincronización en vivo activa (actualiza automáticamente al pagar)"}
+                  </span>
+                </div>
+                {lastSyncTime && (
+                  <span className="text-[10px] sm:text-[11px] text-slate-400 dark:text-slate-500 tabular-nums font-medium">
+                    Actualizado: {lastSyncTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                  </span>
+                )}
+              </div>
+
+              <InvoiceList
+                invoices={invoices}
+                isLoading={isLoadingInvoices}
+                onViewPdf={(invoice) => setSelectedInvoiceForPdf(invoice)}
+                onPayInvoice={(invoice) => handleOpenPayment(invoice)}
+              />
+            </div>
           </div>
         )}
       </main>

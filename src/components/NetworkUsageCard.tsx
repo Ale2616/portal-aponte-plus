@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ClientProfile, DayUsage, NetworkUsageData } from "@/lib/types";
+import { toast } from "sonner";
 import {
   Activity,
   ArrowDownCircle,
@@ -31,6 +32,8 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
   const [liveConsumo, setLiveConsumo] = useState<NetworkUsageData | null>(null);
   const [mikrotikLive, setMikrotikLive] = useState<any>(null);
   const [isMikrotikPolling, setIsMikrotikPolling] = useState(false);
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const [lastRefreshTime, setLastRefreshTime] = useState<number>(0);
 
 
   // 1. Extraer la fecha real de activación en el orden solicitado:
@@ -172,7 +175,7 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
     fetchTraffic();
   }, [client.id]);
 
-  // Extraer IP de la línea para consultar MikroTik RouterOS
+  // Extraer IP y Cédula para consultar MikroTik RouterOS
   const rawIp = servicioActivo?.ip || (client as any)?.ip || client?.servicio?.ip || "";
   const clientIp = typeof rawIp === "string" ? rawIp.trim().replace(/^["']|["']$/g, "") : "";
   const hasValidIp = Boolean(
@@ -183,41 +186,49 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
     !clientIp.toLowerCase().includes("undefined")
   );
 
-  // Polling moderado a la API interna de MikroTik cada 8 segundos con detector de visibilidad
-  useEffect(() => {
-    if (!hasValidIp) return;
+  const rawCedula = client.cedula || (client as any)?.documento || "";
+  const clientCedula = typeof rawCedula === "string" ? rawCedula.trim() : String(rawCedula || "");
+  const canQueryMikrotik = Boolean(hasValidIp || clientCedula);
 
-    let isMounted = true;
-    let timerId: NodeJS.Timeout | null = null;
-
-    const fetchMikrotikLive = async () => {
-      // Pausar si la pestaña no está activa para evitar saturar el MikroTik
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+  // Consulta optimizada a la API /api/trafico con soporte de IP y cédula
+  const fetchMikrotikLive = useCallback(
+    async (isManual = false) => {
+      if (!canQueryMikrotik) return;
+      if (!isManual && typeof document !== "undefined" && document.visibilityState === "hidden") {
         return;
       }
 
       try {
         setIsMikrotikPolling(true);
-        const res = await fetch(`/api/servicio/trafico?ip=${encodeURIComponent(clientIp)}`, {
+        const params = new URLSearchParams();
+        if (clientIp) params.set("ip", clientIp);
+        if (clientCedula) params.set("cedula", clientCedula);
+        if (client.id) params.set("id", String(client.id));
+
+        const res = await fetch(`/api/trafico?${params.toString()}`, {
           cache: "no-store",
         });
         if (!res.ok) return;
         const data = await res.json();
-        if (isMounted && data.success) {
+        if (data && data.success) {
           setMikrotikLive(data);
         }
       } catch {
         // Manejo silencioso defensivo
       } finally {
-        if (isMounted) {
-          setIsMikrotikPolling(false);
-        }
+        setIsMikrotikPolling(false);
       }
-    };
+    },
+    [canQueryMikrotik, clientIp, clientCedula, client.id]
+  );
+
+  // Sondeo ligero a MikroTik cada 8 segundos con detector de visibilidad de pestaña
+  useEffect(() => {
+    if (!canQueryMikrotik) return;
 
     fetchMikrotikLive();
 
-    timerId = setInterval(() => {
+    const timerId = setInterval(() => {
       fetchMikrotikLive();
     }, 8000);
 
@@ -229,11 +240,46 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      isMounted = false;
-      if (timerId) clearInterval(timerId);
+      clearInterval(timerId);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [clientIp, hasValidIp]);
+  }, [canQueryMikrotik, fetchMikrotikLive]);
+
+  // Actualización manual bajo demanda con protección contra saturación (cooldown 3s)
+  const handleManualRefresh = async () => {
+    const now = Date.now();
+    if (now - lastRefreshTime < 3000) {
+      toast.info("Por favor espera un momento antes de volver a consultar el router");
+      return;
+    }
+
+    setIsManualRefreshing(true);
+    setLastRefreshTime(now);
+
+    try {
+      await Promise.all([
+        fetchMikrotikLive(true),
+        (async () => {
+          if (!client.id) return;
+          try {
+            const res = await fetch(`/api/cliente/consumo?id_servicio=${encodeURIComponent(client.id)}`);
+            const data = await res.json();
+            if (data.success && data.consumo) {
+              setLiveConsumo(data.consumo);
+              setSyncError(null);
+            }
+          } catch {
+            // Ignorar
+          }
+        })(),
+      ]);
+      toast.success("Consumo y velocidad actualizados");
+    } catch {
+      toast.error("No se pudo actualizar el tráfico");
+    } finally {
+      setIsManualRefreshing(false);
+    }
+  };
 
   // Cálculo del porcentaje de velocidad contratada para tacómetro
   const planSpeedMatch = String(client.plan?.velocidadBajada || "").match(/\d+/);
@@ -258,7 +304,7 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
 
   return (
     <div className="w-full rounded-3xl p-4 sm:p-6 md:p-7 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl space-y-5 sm:space-y-6 overflow-hidden">
-      {/* Header de la tarjeta */}
+      {/* Header de la tarjeta: Estado de Conexión y Tráfico */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-2xl bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
@@ -267,17 +313,33 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
-                Mi Consumo de Internet
+                Estado de Conexión y Tráfico
               </h3>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Monitoreo de tráfico real sincronizado con la red central
+              Consumo acumulado y velocidad en tiempo real con MikroTik RouterOS
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-sans font-semibold tracking-tight tabular-nums text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 px-3 py-1.5 rounded-xl border border-slate-200/60 dark:border-slate-700/60 self-start sm:self-auto">
-          <span>{etiquetaActivacion}</span>
+        <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+          {/* Botón interactivo para actualizar consumo y velocidad */}
+          <button
+            type="button"
+            onClick={handleManualRefresh}
+            disabled={isManualRefreshing || isMikrotikPolling}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold tracking-tight transition-all duration-200 cursor-pointer bg-sky-500/10 hover:bg-sky-500/20 text-sky-600 dark:text-sky-400 border border-sky-500/30 hover:border-sky-500/50 active:scale-95 disabled:opacity-50 shadow-xs"
+            title="Actualizar datos de consumo y velocidad en tiempo real"
+          >
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${isManualRefreshing || isMikrotikPolling ? "animate-spin text-sky-500" : ""}`}
+            />
+            <span>{isManualRefreshing ? "Actualizando..." : "Actualizar consumo"}</span>
+          </button>
+
+          <div className="flex items-center gap-2 text-xs font-sans font-semibold tracking-tight tabular-nums text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 px-3 py-1.5 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+            <span>{etiquetaActivacion}</span>
+          </div>
         </div>
       </div>
 
@@ -394,7 +456,7 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
         <div className="p-3 sm:p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-1 overflow-hidden">
           <div className="flex items-center justify-between gap-1">
             <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400 truncate block">
-              Sesión en Vivo
+              Sesión MikroTik
             </span>
             <div className="flex items-center gap-1.5">
               {isMikrotikPolling && (
@@ -405,11 +467,13 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
           </div>
           <p className="text-base sm:text-lg lg:text-xl font-bold font-sans tracking-tight tabular-nums text-slate-900 dark:text-slate-100 truncate">
             <span className="text-sky-600 dark:text-sky-400">
-              ↓ {liveSesionDescarga}
+              {mikrotikLive?.consumo?.totalFormateada || `↓ ${liveSesionDescarga}`}
             </span>
           </p>
           <span className="text-[10px] sm:text-[11px] text-emerald-600 dark:text-emerald-400 font-medium block truncate font-sans tracking-tight tabular-nums">
-            ↑ {liveSesionSubida} • En Línea
+            {mikrotikLive?.consumo?.totalFormateada
+              ? `↓ ${liveSesionDescarga} / ↑ ${liveSesionSubida}`
+              : `↑ ${liveSesionSubida} • En Línea`}
           </span>
         </div>
       </div>
@@ -440,11 +504,11 @@ export function NetworkUsageCard({ client }: NetworkUsageCardProps) {
             <div>
               <div className="flex items-center gap-2">
                 <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
-                  Velocidad en Vivo
+                  Velocidad en Tiempo Real
                 </h4>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                Métricas instantáneas de navegación en tiempo real
+                Métricas instantáneas de navegación en vivo desde el router MikroTik
               </p>
             </div>
           </div>

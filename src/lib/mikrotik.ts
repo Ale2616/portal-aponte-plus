@@ -1,4 +1,5 @@
 import { Agent } from "undici";
+import { getClientByDocument } from "@/lib/wisphub";
 
 export interface MikrotikTrafficResult {
   success: boolean;
@@ -14,10 +15,13 @@ export interface MikrotikTrafficResult {
   consumo: {
     descargaBytes: number;
     subidaBytes: number;
+    totalBytes: number;
     descargaMb: number;
     subidaMb: number;
+    totalMb: number;
     descargaGb: number;
     subidaGb: number;
+    totalGb: number;
     descargaFormateada: string;
     subidaFormateada: string;
     totalFormateada: string;
@@ -30,6 +34,8 @@ export interface MikrotikTrafficResult {
   estadoCola: {
     activo: boolean;
     dinamica: boolean;
+    nombre?: string;
+    ip?: string;
   };
   timestamp: string;
   motivo?: string | null;
@@ -61,10 +67,13 @@ export function getEmptyTrafficResult(motivo = "Sin conexión activa"): Mikrotik
     consumo: {
       descargaBytes: 0,
       subidaBytes: 0,
+      totalBytes: 0,
       descargaMb: 0,
       subidaMb: 0,
+      totalMb: 0,
       descargaGb: 0,
       subidaGb: 0,
+      totalGb: 0,
       descargaFormateada: "0.0 GB",
       subidaFormateada: "0.0 GB",
       totalFormateada: "0.0 GB",
@@ -134,24 +143,37 @@ function formatBytes(bytes: number): string {
 /**
  * Consulta la API REST de MikroTik RouterOS v7 para obtener el tráfico y métricas en vivo.
  *
- * @param ipOrId Dirección IP del cliente (ej. 172.16.100.17) o identificador de cola
+ * @param ipOrId Dirección IP del cliente, cédula o identificador de Simple Queue
+ * @param clientCedula Cédula del cliente (opcional, para resolución automática de IP si aplica)
  * @returns MikrotikTrafficResult Métricas sanitizadas en tiempo real o fallback en 0.00
  */
-export async function getMikrotikQueueTraffic(ipOrId: string): Promise<MikrotikTrafficResult> {
+export async function getMikrotikQueueTraffic(
+  ipOrId: string,
+  clientCedula?: string
+): Promise<MikrotikTrafficResult> {
   const cleanTarget = (ipOrId || "").trim();
-  if (!cleanTarget || cleanTarget === "0.0.0.0" || cleanTarget.toLowerCase().includes("no asignada")) {
-    return getEmptyTrafficResult("IP de servicio no válida");
+  const cleanCedula = (clientCedula || "").trim();
+
+  if (!cleanTarget && !cleanCedula) {
+    return getEmptyTrafficResult("Identificador o IP no especificado");
   }
 
   const host = process.env.MIKROTIK_HOST;
-  const user = process.env.MIKROTIK_USER;
-  const password = process.env.MIKROTIK_PASSWORD;
+  const user = process.env.MIKROTIK_USER || "alejandro";
+  const password = process.env.MIKROTIK_PASS || process.env.MIKROTIK_PASSWORD || "alejandro2026";
   const port = process.env.MIKROTIK_PORT || "443";
   const useSsl = process.env.MIKROTIK_USE_SSL !== "false";
 
   // Si las credenciales no están configuradas en el entorno
-  if (!host || !user || !password || host === "tu_ip_o_dominio_mikrotik" || host === "localhost") {
-    return getEmptyTrafficResult("Credenciales de MikroTik no configuradas");
+  if (
+    !host ||
+    !user ||
+    !password ||
+    host === "tu_ip_o_dominio_mikrotik" ||
+    host === "tu_ip_o_host_del_router" ||
+    host === "localhost"
+  ) {
+    return getEmptyTrafficResult("Credenciales de MikroTik no configuradas o host en espera de IP real");
   }
 
   const protocol = useSsl ? "https" : "http";
@@ -159,13 +181,9 @@ export async function getMikrotikQueueTraffic(ipOrId: string): Promise<MikrotikT
   const authHeader = `Basic ${Buffer.from(`${user}:${password}`).toString("base64")}`;
 
   try {
-    // Intentar buscar la cola simple por target con /32 o directo
-    const targetWithMask = cleanTarget.includes("/") ? cleanTarget : `${cleanTarget}/32`;
-    const targetClean = cleanTarget.replace(/\/32$/, "");
-
-    // Realizar la consulta con timeout defensivo estricto (3.5s)
+    // Función auxiliar para consultar el endpoint REST de colas simples
     const fetchQueue = async (queryParam: string) => {
-      const url = `${baseUrl}/rest/queue/simple?${queryParam}`;
+      const url = `${baseUrl}/rest/queue/simple${queryParam ? `?${queryParam}` : ""}`;
       const res = await fetch(url, {
         method: "GET",
         headers: {
@@ -183,37 +201,103 @@ export async function getMikrotikQueueTraffic(ipOrId: string): Promise<MikrotikT
 
     let queueData: any = null;
 
-    // 1. Búsqueda por target=IP/32
-    try {
-      const resMask = await fetchQueue(`target=${encodeURIComponent(targetWithMask)}`);
-      if (Array.isArray(resMask) && resMask.length > 0) {
-        queueData = resMask[0];
-      }
-    } catch {
-      // Ignorar y pasar al siguiente fallback
-    }
+    // Detectar si cleanTarget es una IP válida (v4)
+    const isIpAddress = /^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/.test(cleanTarget);
+    let resolvedIp = isIpAddress ? cleanTarget.replace(/\/\d+$/, "") : "";
 
-    // 2. Búsqueda por target=IP (sin máscara)
-    if (!queueData) {
+    // Si cleanTarget parece ser una cédula (o se pasó clientCedula), intentar resolver IP en WispHub
+    if (!resolvedIp && (/^\d{5,15}$/.test(cleanTarget) || cleanCedula)) {
       try {
-        const resIp = await fetchQueue(`target=${encodeURIComponent(targetClean)}`);
-        if (Array.isArray(resIp) && resIp.length > 0) {
-          queueData = resIp[0];
+        const docToLookup = isIpAddress ? cleanCedula : cleanTarget || cleanCedula;
+        if (docToLookup) {
+          const clientData = await getClientByDocument(docToLookup);
+          if (clientData.success && clientData.cliente) {
+            const potentialIp =
+              (clientData.cliente.servicio as any)?.ip ||
+              (clientData.cliente as any)?.ip ||
+              clientData.cliente.servicio?.ip;
+            if (
+              potentialIp &&
+              typeof potentialIp === "string" &&
+              potentialIp !== "0.0.0.0" &&
+              !potentialIp.toLowerCase().includes("no asignada")
+            ) {
+              resolvedIp = potentialIp.trim().replace(/^["']|["']$/g, "").replace(/\/\d+$/, "");
+            }
+          }
         }
       } catch {
-        // Ignorar
+        // Ignorar fallo de resolución de WispHub y continuar
       }
     }
 
-    // 3. Búsqueda por name (ID de línea o usuario)
-    if (!queueData) {
+    // 1. Búsqueda por target=IP/32 si tenemos una IP
+    if (resolvedIp) {
+      try {
+        const resMask = await fetchQueue(`target=${encodeURIComponent(`${resolvedIp}/32`)}`);
+        if (Array.isArray(resMask) && resMask.length > 0) {
+          queueData = resMask[0];
+        }
+      } catch {
+        // Continuar al siguiente intento
+      }
+
+      // 2. Búsqueda por target=IP (sin máscara)
+      if (!queueData) {
+        try {
+          const resIp = await fetchQueue(`target=${encodeURIComponent(resolvedIp)}`);
+          if (Array.isArray(resIp) && resIp.length > 0) {
+            queueData = resIp[0];
+          }
+        } catch {
+          // Continuar
+        }
+      }
+    }
+
+    // 3. Búsqueda por name (ID de línea, cédula o nombre exacto)
+    if (!queueData && cleanTarget) {
       try {
         const resName = await fetchQueue(`name=${encodeURIComponent(cleanTarget)}`);
         if (Array.isArray(resName) && resName.length > 0) {
           queueData = resName[0];
         }
       } catch {
-        // Ignorar
+        // Continuar
+      }
+    }
+
+    // 4. Búsqueda por name usando la cédula
+    if (!queueData && cleanCedula) {
+      try {
+        const resCed = await fetchQueue(`name=${encodeURIComponent(cleanCedula)}`);
+        if (Array.isArray(resCed) && resCed.length > 0) {
+          queueData = resCed[0];
+        }
+      } catch {
+        // Continuar
+      }
+    }
+
+    // 5. Fallback amplio: obtener colas simples y buscar coincidencia en nombre, target o comentario
+    if (!queueData) {
+      try {
+        const allQueues = await fetchQueue(".proplist=.id,name,target,rate,bytes,disabled,dynamic,comment");
+        if (Array.isArray(allQueues) && allQueues.length > 0) {
+          const searchTerms = [cleanTarget, cleanCedula, resolvedIp].filter(Boolean);
+          queueData = allQueues.find((q: any) => {
+            const qName = String(q.name || "").toLowerCase();
+            const qTarget = String(q.target || "").toLowerCase();
+            const qComment = String(q.comment || "").toLowerCase();
+
+            return searchTerms.some((term) => {
+              const lower = term.toLowerCase();
+              return qName.includes(lower) || qTarget.includes(lower) || qComment.includes(lower);
+            });
+          });
+        }
+      } catch {
+        // Continuar
       }
     }
 
@@ -243,19 +327,22 @@ export async function getMikrotikQueueTraffic(ipOrId: string): Promise<MikrotikT
     const bytesPair = parseMikrotikPair(queueData.bytes);
     const uploadBytes = bytesPair.upload;
     const downloadBytes = bytesPair.download;
+    const totalBytes = downloadBytes + uploadBytes;
 
     const uploadGb = Number((uploadBytes / (1024 * 1024 * 1024)).toFixed(2));
     const downloadGb = Number((downloadBytes / (1024 * 1024 * 1024)).toFixed(2));
+    const totalGb = Number((totalBytes / (1024 * 1024 * 1024)).toFixed(2));
+
     const uploadMb = Number((uploadBytes / (1024 * 1024)).toFixed(0));
     const downloadMb = Number((downloadBytes / (1024 * 1024)).toFixed(0));
+    const totalMb = Number((totalBytes / (1024 * 1024)).toFixed(0));
 
     const downloadFormateada = formatBytes(downloadBytes);
     const subidaFormateada = formatBytes(uploadBytes);
-    const totalBytes = downloadBytes + uploadBytes;
     const totalFormateada = formatBytes(totalBytes);
 
     // PRIVACIDAD ESTRICTA: Solo devolver métricas numéricas y formateadas calculadas.
-    // NUNCA incluir nombres de interfaces WAN, comentarios de infraestructura ni rutas del router.
+    // NUNCA incluir contraseñas ni configuraciones internas sensibles.
     return {
       success: true,
       enLinea: !isDisabled,
@@ -270,10 +357,13 @@ export async function getMikrotikQueueTraffic(ipOrId: string): Promise<MikrotikT
       consumo: {
         descargaBytes: downloadBytes,
         subidaBytes: uploadBytes,
+        totalBytes,
         descargaMb: downloadMb,
         subidaMb: uploadMb,
+        totalMb,
         descargaGb: downloadGb,
         subidaGb: uploadGb,
+        totalGb,
         descargaFormateada: downloadFormateada,
         subidaFormateada,
         totalFormateada,
@@ -286,12 +376,17 @@ export async function getMikrotikQueueTraffic(ipOrId: string): Promise<MikrotikT
       estadoCola: {
         activo: !isDisabled,
         dinamica: isDynamic,
+        nombre: queueData.name ? String(queueData.name) : undefined,
+        ip: resolvedIp || (queueData.target ? String(queueData.target).replace(/\/32$/, "") : undefined),
       },
       timestamp: new Date().toISOString(),
     };
   } catch (error: any) {
     // Si el router no responde (timeout) o hay error de red, retornar 200 con ceros defensivamente
-    console.warn("[MikroTik API Defensivo]: Router no respondió o error de conexión:", error?.message || error);
+    console.warn(
+      "[MikroTik API Defensivo]: Router no respondió o error de conexión:",
+      error?.message || error
+    );
     return getEmptyTrafficResult("Router MikroTik no disponible");
   }
 }

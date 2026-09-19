@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { branding } from "@/config/branding";
 import { ConfigProvider } from "@/context/ConfigContext";
+import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -63,6 +64,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased min-h-[100dvh] flex flex-col overflow-x-hidden w-full max-w-full`}
       >
         <ConfigProvider>
+          <ServiceWorkerRegister />
           <Toaster
             position="bottom-center"
             duration={3000}

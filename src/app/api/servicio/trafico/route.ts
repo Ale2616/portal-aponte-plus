@@ -21,12 +21,13 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const ip = searchParams.get("ip") || "";
     const id = searchParams.get("id") || searchParams.get("id_servicio") || "";
+    const cedula = searchParams.get("cedula") || searchParams.get("documento") || "";
 
-    const target = (ip || id).trim();
+    const target = (ip || id || cedula).trim();
 
-    if (!target) {
+    if (!target && !cedula) {
       return NextResponse.json(
-        getEmptyTrafficResult("Debe especificar la IP o ID del servicio (?ip=...)"),
+        getEmptyTrafficResult("Debe especificar la IP, cédula o ID del servicio (?ip=... o ?cedula=...)"),
         {
           status: 200,
           headers: {
@@ -36,7 +37,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const trafficData = await getMikrotikQueueTraffic(target);
+    const trafficData = await getMikrotikQueueTraffic(target, cedula);
 
     return NextResponse.json(trafficData, {
       status: 200,

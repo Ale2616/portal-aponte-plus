@@ -27,7 +27,6 @@ export function InstallPWAButton({ variant = "header" }: { variant?: "header" | 
 
     if (checkStandalone()) {
       setIsStandalone(true);
-      return;
     }
 
     // 2. Registrar el Service Worker

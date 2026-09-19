@@ -1,7 +1,10 @@
-const CACHE_NAME = 'aponte-plus-pwa-v2';
+const CACHE_NAME = 'aponte-plus-pwa-v3';
 const ASSETS_TO_CACHE = [
   '/manifest.json',
   '/logo.jpg',
+  '/logo.png',
+  '/icon.png',
+  '/badge.png',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png',
   '/icons/apple-touch-icon.png'
@@ -44,50 +47,56 @@ self.addEventListener('fetch', (event) => {
 // ===================================================================
 // GESTIÓN DE NOTIFICACIONES PUSH (Web Push API)
 // ===================================================================
-self.addEventListener('push', (event) => {
-  if (!event.data) return;
-
-  try {
-    const data = event.data.json();
-    const options = {
-      body: data.body || 'Tu pago ha sido validado exitosamente.',
-      icon: data.icon || '/icons/icon-192x192.png',
-      badge: data.badge || '/icons/icon-192x192.png',
-      vibrate: [100, 50, 100],
-      tag: data.tag || 'pago-confirmado',
-      renotify: true,
-      data: {
-        url: data.url || '/',
-      },
-    };
-
-    event.waitUntil(
-      self.registration.showNotification(data.title || 'Internet Aponte Plus', options)
-    );
-  } catch {
-    const text = event.data.text();
-    event.waitUntil(
-      self.registration.showNotification('Internet Aponte Plus', {
-        body: text || 'Tu pago ha sido validado exitosamente.',
-        icon: '/icons/icon-192x192.png',
-        badge: '/icons/icon-192x192.png',
-        data: { url: '/' },
-      })
-    );
+self.addEventListener('push', function (event) {
+  let data = {};
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch (e) {
+      data = {
+        title: 'Internet Aponte',
+        body: event.data.text() || 'Tu pago del servicio de internet ha sido registrado con éxito.',
+      };
+    }
   }
+
+  const title = data.title || 'Internet Aponte';
+  const options = {
+    body: data.body || 'Tu pago del servicio de internet ha sido registrado con éxito.',
+    icon: data.icon || '/logo.png',
+    badge: data.badge || '/badge.png',
+    vibrate: [100, 50, 100],
+    tag: data.tag || 'pago-confirmado',
+    renotify: true,
+    data: {
+      url: data.url || '/',
+      dateOfArrival: Date.now(),
+    },
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(title, options)
+  );
 });
 
-self.addEventListener('notificationclick', (event) => {
+self.addEventListener('notificationclick', function (event) {
   event.notification.close();
   const targetUrl = event.notification.data?.url || '/';
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      // 1. Si ya hay una pestaña abierta con el portal, enfocarla
       for (const client of windowClients) {
-        if (client.url.includes(targetUrl) && 'focus' in client) {
-          return client.focus();
+        if ('focus' in client) {
+          if (client.url.includes(targetUrl) || client.url.includes(self.registration.scope)) {
+            if ('navigate' in client && targetUrl !== '/') {
+              client.navigate(targetUrl);
+            }
+            return client.focus();
+          }
         }
       }
+      // 2. Si no hay pestaña abierta, abrir una nueva
       if (clients.openWindow) {
         return clients.openWindow(targetUrl);
       }
