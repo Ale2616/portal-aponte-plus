@@ -25,9 +25,19 @@ export interface ScrapedDayTraffic {
   uploadGb: number;    // Subida en GB (2 decimales)
 }
 
+export interface MonthlyTraffic {
+  mes: string;        // "Ene", "Feb", ...
+  mesNumero: number;  // 1 to 12
+  year?: number;      // 2026
+  downloadGb: number;
+  uploadGb: number;
+  totalGb: number;
+}
+
 export interface CachedTrafficRecord {
   serviceId: string;
   dias: ScrapedDayTraffic[];
+  meses?: MonthlyTraffic[];
   cachedAt: number;     // Timestamp en milisegundos
   version: number;
 }
@@ -269,7 +279,8 @@ export async function getTrafficCache(serviceId: string | number): Promise<Cache
  */
 export async function setTrafficCache(
   serviceId: string | number,
-  dias: ScrapedDayTraffic[]
+  dias: ScrapedDayTraffic[],
+  meses?: MonthlyTraffic[]
 ): Promise<void> {
   const cleanId = String(serviceId || "").trim();
   if (!cleanId || !Array.isArray(dias)) return;
@@ -277,6 +288,7 @@ export async function setTrafficCache(
   const record: CachedTrafficRecord = {
     serviceId: cleanId,
     dias,
+    meses,
     cachedAt: Date.now(),
     version: 1,
   };
@@ -295,6 +307,27 @@ export async function setTrafficCache(
   if (getRedisConfig()) {
     void saveToRedis(record);
   }
+}
+
+/**
+ * Obtiene el registro completo de tráfico (días y meses) de RAM o Disco.
+ */
+export function getFullTrafficRecord(serviceId: string | number): CachedTrafficRecord | null {
+  const cleanId = String(serviceId || "").trim();
+  if (!cleanId) return null;
+
+  if (l1MemoryStore.has(cleanId)) {
+    return l1MemoryStore.get(cleanId) || null;
+  }
+
+  const diskMap = readDiskCache();
+  const diskRecord = diskMap[cleanId];
+  if (diskRecord) {
+    l1MemoryStore.set(cleanId, diskRecord);
+    return diskRecord;
+  }
+
+  return null;
 }
 
 /**

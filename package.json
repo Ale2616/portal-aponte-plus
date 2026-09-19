@@ -12,6 +12,7 @@
     "@hookform/resolvers": "^5.9.1",
     "@types/web-push": "^3.6.4",
     "canvas-confetti": "^1.9.4",
+    "chart.js": "^4.5.1",
     "cheerio": "^1.2.0",
     "clsx": "^2.1.1",
     "lucide-react": "^1.42.0",

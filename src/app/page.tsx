@@ -736,7 +736,7 @@ function PortalContent() {
             />
 
             {/* 3. Tarjeta de Métricas y Tráfico de Red */}
-            <NetworkUsageCard client={client} />
+            <NetworkUsageCard client={client} invoices={invoices} />
 
             {/* Banner de Notificaciones Push Web para Confirmación de Pagos */}
             <PushNotificationCard

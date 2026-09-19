@@ -5,6 +5,8 @@ import {
   getWisphubClientDetail,
   calculateServiceUsage,
 } from "@/lib/wisphub";
+import { getFullTrafficRecord } from "@/lib/traffic-cache";
+import { getHistorialTraficoByServicio } from "@/lib/db-historial-trafico";
 
 interface ClientMetaCache {
   data: any;
@@ -89,12 +91,27 @@ export async function GET(req: NextRequest) {
 
     // Convertir los datos del scraper al formato esperado por calculateServiceUsage
     let trafficPayload: any = null;
+    let effectiveSource = trafficResult.source;
+    let effectiveCached = trafficResult.cached || false;
+
     if (trafficResult.success && trafficResult.dias.length > 0) {
       trafficPayload = trafficResult.dias.map((d) => ({
         fecha: d.fecha,
         download_mib: d.downloadGb * 1024,
         upload_mib: d.uploadGb * 1024,
       }));
+    } else {
+      // Fallback a base de datos local o caché consolidado de tráfico
+      const storedRecord = getFullTrafficRecord(resolvedServiceId);
+      if (storedRecord?.dias && storedRecord.dias.length > 0) {
+        trafficPayload = storedRecord.dias.map((d) => ({
+          fecha: d.fecha,
+          download_mib: d.downloadGb * 1024,
+          upload_mib: d.uploadGb * 1024,
+        }));
+        effectiveSource = "database_historial_trafico_cliente" as any;
+        effectiveCached = true;
+      }
     }
 
     const rawObj = {
@@ -116,12 +133,12 @@ export async function GET(req: NextRequest) {
     const response = NextResponse.json({
       success: true,
       consumo,
-      _trafficSource: trafficResult.source,
-      _trafficCached: trafficResult.cached || false,
+      _trafficSource: effectiveSource,
+      _trafficCached: effectiveCached,
       _trafficStale: trafficResult.stale || false,
-      _cacheStatus: trafficResult.cacheStatus || (trafficResult.cached ? "fresh" : "miss"),
+      _cacheStatus: effectiveCached ? "fresh" : (trafficResult.cacheStatus || "miss"),
       _responseTimeMs: totalDurationMs,
-      _trafficError: trafficResult.error || null,
+      _trafficError: trafficPayload ? null : (trafficResult.error || null),
     });
 
     // Encabezados diagnósticos de rendimiento HTTP

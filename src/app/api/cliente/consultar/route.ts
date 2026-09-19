@@ -4,11 +4,11 @@ import { sanitizeDocument } from "@/lib/utils";
 import { getClientByDocument } from "@/lib/wisphub";
 
 const ConsultarSchema = z.object({
-  documento: z
-    .string()
-    .min(1, "Debes ingresar un número de documento")
-    .max(30, "El documento es demasiado largo"),
+  documento: z.string().optional(),
+  cedula: z.string().optional(),
   id_servicio: z.union([z.string(), z.number()]).optional().nullable(),
+}).refine((data) => Boolean(data.documento || data.cedula), {
+  message: "Debes ingresar un número de documento o cédula",
 });
 
 export async function POST(req: NextRequest) {
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: errorMsg }, { status: 400 });
     }
 
-    const rawInput = parseResult.data.documento.toString().trim();
+    const rawInput = (parseResult.data.documento || parseResult.data.cedula || "").toString().trim();
     const cleanDocument = sanitizeDocument(rawInput);
     const targetServiceId = parseResult.data.id_servicio ? String(parseResult.data.id_servicio).trim() : null;
 
